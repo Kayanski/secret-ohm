@@ -1,0 +1,48 @@
+
+Variables : 
+	address public immutable OHM;
+    address public immutable sOHM;
+
+    struct Epoch {
+        uint length;
+        uint number;
+        uint endBlock;
+        uint distribute;
+    }
+    Epoch public epoch;
+
+    address public distributor;
+    
+    address public locker;
+    uint public totalBonus;
+    
+    address public warmupContract;
+    uint public warmupPeriod;
+    
+    constructor ( 
+        address _OHM, 
+        address _sOHM, 
+        uint _epochLength,
+        uint _firstEpochNumber,
+        uint _firstEpochBlock
+    ) {
+        require( _OHM != address(0) );
+        OHM = _OHM;
+        require( _sOHM != address(0) );
+        sOHM = _sOHM;
+        
+        epoch = Epoch({
+            length: _epochLength,
+            number: _firstEpochNumber,
+            endBlock: _firstEpochBlock,
+            distribute: 0
+        });
+    }
+
+    struct Claim {
+        uint deposit;
+        uint gons;
+        uint expiry;
+        bool lock; // prevents malicious delays
+    }
+    mapping( address => Claim ) public warmupInfo;
