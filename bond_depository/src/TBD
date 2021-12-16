@@ -1,0 +1,82 @@
+Handle (DONE)
+	change_admin
+	initialize_bond_terms
+	 	deps: &mut Extern<S, A, Q>,
+	    env: Env,
+	    control_variable: u128, 
+	    vesting_term: u64,
+	    minimum_price: u128,
+	    max_payout: u128,
+	    fee: u128,
+	    max_debt: u128, 
+	    initial_debt: u128
+	set_bond_terms
+		deps: &mut Extern<S, A, Q>,
+	    env: Env,
+	    parameter: Parameter,
+	    input: u128,
+	set_adjustment<S: Storage, A: Api, Q: Querier>(
+	    deps: &mut Extern<S, A, Q>,
+	    env: Env,
+	    addition: bool,
+	    increment: u128,
+	    target: u128,
+	    buffer: u64,
+	set_staking<S: Storage, A: Api, Q: Querier>(
+    	deps: &mut Extern<S, A, Q>,
+	    env: Env,
+	    staking: Contract,
+	redeem<S: Storage, A: Api, Q: Querier>(
+	    deps: &mut Extern<S, A, Q>,
+	    env: Env,
+	    recipient:  HumanAddr,
+	    stake: bool,
+	recover_lost_token<S: Storage, A: Api, Q: Querier>(
+    	deps: &mut Extern<S, A, Q>,
+    	env: Env,
+    	token: Contract
+
+Receive : (done)
+	deposit<S: Storage, A: Api, Q: Querier>(
+	    deps: &mut Extern<S, A, Q>,
+	    env: Env,
+	    amount: u128,
+	    max_price: u128,
+	    depositor: HumanAddr,
+Query: (done)
+	max_payout<S: Storage, A: Api, Q: Querier>(
+	    deps: &mut Extern<S, A, Q>,
+	    env: Env,
+	payout_for<S: Storage, A: Api, Q: Querier>(
+	    deps: &mut Extern<S, A, Q>,
+	    env: Env,
+	    value: u128
+	bond_price<S: Storage, A: Api, Q: Querier>(
+    	deps: &mut Extern<S, A, Q>,
+    	env: Env,
+	bond_price_in_usd<S: Storage, A: Api, Q: Querier>(
+    	deps: &mut Extern<S, A, Q>,
+    	env: Env,
+    debt_ratio<S: Storage, A: Api, Q: Querier>(
+	    deps: &mut Extern<S, A, Q>,
+	    env: Env
+	standardized_debt_ratio<S: Storage, A: Api, Q: Querier>(
+	    deps: &mut Extern<S, A, Q>,
+	    env: Env
+	current_debt<S: Storage, A: Api, Q: Querier>(
+    	deps: &mut Extern<S, A, Q>,
+    	env: Env
+   	debt_decay<S: Storage, A: Api, Q: Querier>(
+    	deps: &mut Extern<S, A, Q>,
+    	env: Env
+Private query: (done)
+	BondInfo
+	percent_vested_for<S: Storage, A: Api, Q: Querier>(
+	    deps: &mut Extern<S, A, Q>,
+	    env: Env,
+	    depositor: HumanAddr
+	pending_payout_for<S: Storage, A: Api, Q: Querier>(
+    	deps: &mut Extern<S, A, Q>,
+    	env: Env,
+    	depositor: HumanAddr
+
