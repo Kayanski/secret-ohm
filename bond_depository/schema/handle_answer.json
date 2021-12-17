@@ -5,15 +5,97 @@
     {
       "type": "object",
       "required": [
+        "initialize_bond_terms"
+      ],
+      "properties": {
+        "initialize_bond_terms": {
+          "type": "object",
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "$ref": "#/definitions/ResponseStatus"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "set_bond_terms"
+      ],
+      "properties": {
+        "set_bond_terms": {
+          "type": "object",
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "$ref": "#/definitions/ResponseStatus"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "set_adjustment"
+      ],
+      "properties": {
+        "set_adjustment": {
+          "type": "object",
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "$ref": "#/definitions/ResponseStatus"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "set_staking"
+      ],
+      "properties": {
+        "set_staking": {
+          "type": "object",
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "$ref": "#/definitions/ResponseStatus"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
         "deposit"
       ],
       "properties": {
         "deposit": {
           "type": "object",
           "required": [
+            "payout",
             "status"
           ],
           "properties": {
+            "payout": {
+              "type": "integer",
+              "format": "uint128",
+              "minimum": 0.0
+            },
             "status": {
               "$ref": "#/definitions/ResponseStatus"
             }
@@ -30,9 +112,15 @@
         "redeem": {
           "type": "object",
           "required": [
+            "payout",
             "status"
           ],
           "properties": {
+            "payout": {
+              "type": "integer",
+              "format": "uint128",
+              "minimum": 0.0
+            },
             "status": {
               "$ref": "#/definitions/ResponseStatus"
             }
@@ -43,10 +131,10 @@
     {
       "type": "object",
       "required": [
-        "transfer"
+        "stake_or_send"
       ],
       "properties": {
-        "transfer": {
+        "stake_or_send": {
           "type": "object",
           "required": [
             "status"
@@ -62,10 +150,10 @@
     {
       "type": "object",
       "required": [
-        "send"
+        "recover_lost_token"
       ],
       "properties": {
-        "send": {
+        "recover_lost_token": {
           "type": "object",
           "required": [
             "status"
@@ -81,10 +169,10 @@
     {
       "type": "object",
       "required": [
-        "batch_transfer"
+        "add_recipient"
       ],
       "properties": {
-        "batch_transfer": {
+        "add_recipient": {
           "type": "object",
           "required": [
             "status"
@@ -100,48 +188,10 @@
     {
       "type": "object",
       "required": [
-        "batch_send"
+        "remove_recipient"
       ],
       "properties": {
-        "batch_send": {
-          "type": "object",
-          "required": [
-            "status"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/definitions/ResponseStatus"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "burn"
-      ],
-      "properties": {
-        "burn": {
-          "type": "object",
-          "required": [
-            "status"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/definitions/ResponseStatus"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "register_receive"
-      ],
-      "properties": {
-        "register_receive": {
+        "remove_recipient": {
           "type": "object",
           "required": [
             "status"
@@ -195,269 +245,6 @@
     {
       "type": "object",
       "required": [
-        "increase_allowance"
-      ],
-      "properties": {
-        "increase_allowance": {
-          "type": "object",
-          "required": [
-            "allowance",
-            "owner",
-            "spender"
-          ],
-          "properties": {
-            "allowance": {
-              "$ref": "#/definitions/Uint128"
-            },
-            "owner": {
-              "$ref": "#/definitions/HumanAddr"
-            },
-            "spender": {
-              "$ref": "#/definitions/HumanAddr"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "decrease_allowance"
-      ],
-      "properties": {
-        "decrease_allowance": {
-          "type": "object",
-          "required": [
-            "allowance",
-            "owner",
-            "spender"
-          ],
-          "properties": {
-            "allowance": {
-              "$ref": "#/definitions/Uint128"
-            },
-            "owner": {
-              "$ref": "#/definitions/HumanAddr"
-            },
-            "spender": {
-              "$ref": "#/definitions/HumanAddr"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "transfer_from"
-      ],
-      "properties": {
-        "transfer_from": {
-          "type": "object",
-          "required": [
-            "status"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/definitions/ResponseStatus"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "send_from"
-      ],
-      "properties": {
-        "send_from": {
-          "type": "object",
-          "required": [
-            "status"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/definitions/ResponseStatus"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "batch_transfer_from"
-      ],
-      "properties": {
-        "batch_transfer_from": {
-          "type": "object",
-          "required": [
-            "status"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/definitions/ResponseStatus"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "batch_send_from"
-      ],
-      "properties": {
-        "batch_send_from": {
-          "type": "object",
-          "required": [
-            "status"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/definitions/ResponseStatus"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "burn_from"
-      ],
-      "properties": {
-        "burn_from": {
-          "type": "object",
-          "required": [
-            "status"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/definitions/ResponseStatus"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "batch_burn_from"
-      ],
-      "properties": {
-        "batch_burn_from": {
-          "type": "object",
-          "required": [
-            "status"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/definitions/ResponseStatus"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "mint"
-      ],
-      "properties": {
-        "mint": {
-          "type": "object",
-          "required": [
-            "status"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/definitions/ResponseStatus"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "batch_mint"
-      ],
-      "properties": {
-        "batch_mint": {
-          "type": "object",
-          "required": [
-            "status"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/definitions/ResponseStatus"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "add_minters"
-      ],
-      "properties": {
-        "add_minters": {
-          "type": "object",
-          "required": [
-            "status"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/definitions/ResponseStatus"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "remove_minters"
-      ],
-      "properties": {
-        "remove_minters": {
-          "type": "object",
-          "required": [
-            "status"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/definitions/ResponseStatus"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "set_minters"
-      ],
-      "properties": {
-        "set_minters": {
-          "type": "object",
-          "required": [
-            "status"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/definitions/ResponseStatus"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
         "change_admin"
       ],
       "properties": {
@@ -496,10 +283,10 @@
     {
       "type": "object",
       "required": [
-        "revoke_pemit"
+        "revoke_permit"
       ],
       "properties": {
-        "revoke_pemit": {
+        "revoke_permit": {
           "type": "object",
           "required": [
             "status"
@@ -514,18 +301,12 @@
     }
   ],
   "definitions": {
-    "HumanAddr": {
-      "type": "string"
-    },
     "ResponseStatus": {
       "type": "string",
       "enum": [
         "success",
         "failure"
       ]
-    },
-    "Uint128": {
-      "type": "string"
     },
     "ViewingKey": {
       "type": "string"

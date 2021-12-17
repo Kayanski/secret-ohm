@@ -25,7 +25,6 @@ pub struct InitMsg {
     pub initial_balances: Option<Vec<InitialBalance>>,
     pub prng_seed: Binary,
     pub config: Option<InitConfig>,
-    pub staking_contract:HumanAddr,
     pub index: String
 }
 
@@ -163,6 +162,11 @@ pub enum HandleMsg {
         epoch: u64
     },
 
+    Initialize { 
+        staking_contract: HumanAddr,
+        padding: Option<String>,
+    },
+
     // Admin
     ChangeAdmin {
         address: HumanAddr,
@@ -279,6 +283,9 @@ pub enum HandleAnswer {
 
     //Staking Rebase
     Rebase{
+        status: ResponseStatus,
+    },
+    Initialize{
         status: ResponseStatus,
     },
 }

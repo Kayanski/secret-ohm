@@ -5,6 +5,33 @@
     {
       "type": "object",
       "required": [
+        "receive"
+      ],
+      "properties": {
+        "receive": {
+          "type": "object",
+          "required": [
+            "amount",
+            "from",
+            "msg"
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "from": {
+              "$ref": "#/definitions/HumanAddr"
+            },
+            "msg": {
+              "$ref": "#/definitions/Binary"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
         "redeem"
       ],
       "properties": {
@@ -796,8 +823,177 @@
             "permit_name"
           ],
           "properties": {
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "permit_name": {
               "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "rebase"
+      ],
+      "properties": {
+        "rebase": {
+          "type": "object",
+          "properties": {
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "claim"
+      ],
+      "properties": {
+        "claim": {
+          "type": "object",
+          "required": [
+            "recipient"
+          ],
+          "properties": {
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "recipient": {
+              "$ref": "#/definitions/HumanAddr"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "forfeit"
+      ],
+      "properties": {
+        "forfeit": {
+          "type": "object",
+          "properties": {
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "toggle_deposit_lock"
+      ],
+      "properties": {
+        "toggle_deposit_lock": {
+          "type": "object",
+          "properties": {
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "give_lock_bonus"
+      ],
+      "properties": {
+        "give_lock_bonus": {
+          "type": "object",
+          "required": [
+            "amount"
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "set_contract"
+      ],
+      "properties": {
+        "set_contract": {
+          "type": "object",
+          "required": [
+            "contract",
+            "contract_type"
+          ],
+          "properties": {
+            "contract": {
+              "$ref": "#/definitions/Contract"
+            },
+            "contract_type": {
+              "$ref": "#/definitions/ContractType"
+            },
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "set_warmup_period"
+      ],
+      "properties": {
+        "set_warmup_period": {
+          "type": "object",
+          "required": [
+            "warmup_period"
+          ],
+          "properties": {
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "warmup_period": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             }
           }
         }
@@ -830,12 +1026,35 @@
         }
       }
     },
+    "Contract": {
+      "type": "object",
+      "required": [
+        "address",
+        "code_hash"
+      ],
+      "properties": {
+        "address": {
+          "$ref": "#/definitions/HumanAddr"
+        },
+        "code_hash": {
+          "type": "string"
+        }
+      }
+    },
     "ContractStatusLevel": {
       "type": "string",
       "enum": [
         "normal_run",
         "stop_all_but_redeems",
         "stop_all"
+      ]
+    },
+    "ContractType": {
+      "type": "string",
+      "enum": [
+        "distributor",
+        "warmup_contract",
+        "locker"
       ]
     },
     "HumanAddr": {

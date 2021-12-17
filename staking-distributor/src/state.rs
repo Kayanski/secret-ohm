@@ -29,7 +29,7 @@ pub struct Constants {
     pub treasury: Contract,
     pub epoch_length: u64,
     pub next_epoch_block: u64,
-    pub admin: Option<HumanAddr>,
+    pub admin: HumanAddr,
     pub prng_seed: Vec<u8>,
     pub contract_address: HumanAddr
 }

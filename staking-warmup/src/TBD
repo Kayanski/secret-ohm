@@ -1,0 +1,13 @@
+decimals
+reserves
+Le but c'est de savoir combien coute un token de uniswap
+value = totalvalue * amount / totalsupply / 1e18
+markdown = ohm_reserve * 2 * 1edecimals /totalvalue
+
+
+
+share = nb_ok_token_0 * total_share / total_nb_ok_token_0
+share = nb_ok_token_1 * total_share / total_nb_ok_token_1
+
+
+total_share = total_supply of the liquidity token

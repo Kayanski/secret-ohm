@@ -19,7 +19,7 @@ pub struct InitMsg {
     pub ohm: Contract,
     pub epoch_length: u64,
     pub next_epoch_block: u64,
-    pub admin: HumanAddr,
+    pub admin: Option<HumanAddr>,
     pub prng_seed: Binary,
 }
 

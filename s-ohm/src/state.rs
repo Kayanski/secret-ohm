@@ -55,7 +55,7 @@ pub struct Constants {
     pub contract_address: HumanAddr,
     //Constants for the rebase mechanism
     pub gons_per_fragment : String,
-    pub staking_contract : HumanAddr,
+    pub staking_contract : Option<HumanAddr>,
     pub index: String
 }
 

@@ -203,6 +203,28 @@
           }
         }
       }
+    },
+    {
+      "type": "object",
+      "required": [
+        "contract_balance"
+      ],
+      "properties": {
+        "contract_balance": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "index"
+      ],
+      "properties": {
+        "index": {
+          "type": "object"
+        }
+      }
     }
   ],
   "definitions": {

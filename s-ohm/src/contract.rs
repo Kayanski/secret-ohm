@@ -60,23 +60,10 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
 
     let init_config = msg.config();
     let admin = msg.admin.unwrap_or(env.message.sender);
-    let canon_admin = deps.api.canonical_address(&admin)?;
 
     let total_supply = INITIAL_FRAGMENTS_SUPPLY;
     let gons_per_fragment = get_total_gons().checked_div(U256::from(total_supply)).unwrap();
-    let canon_staking_contract = deps.api.canonical_address(&msg.staking_contract)?;
-    let mut gon_balances = GonBalances::from_storage(&mut deps.storage);
-    gon_balances.set_account_gon_balance(&canon_staking_contract, get_total_gons());
-
-    store_mint(
-        &mut deps.storage,
-        &canon_admin,
-        &canon_staking_contract,
-        Uint128(balance_for_gons(gons_per_fragment,get_total_gons())),
-        msg.symbol.clone(),
-        Some("Initial Gon Balance".to_string()),
-        &env.block,
-    )?;
+    
 
     let prng_seed_hashed = sha_256(&msg.prng_seed.0);
 
@@ -94,7 +81,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         burn_is_enabled: init_config.burn_enabled(),
         contract_address: env.contract.address,
         gons_per_fragment: U256::to_string(&gons_per_fragment),
-        staking_contract: msg.staking_contract,
+        staking_contract: None,
         index : U256::to_string(&gons_for_balance(gons_per_fragment,U256::from_dec_str(&msg.index).unwrap())?)
     })?;
     config.set_total_supply(total_supply);
@@ -146,7 +133,7 @@ pub fn circulating_supply<S: Storage, A: Api, Q: Querier>(
 )-> StdResult<u128>{
 
     let config = ReadonlyConfig::from_storage(& deps.storage);
-    config.total_supply().checked_sub(balance_of(&deps,&config.constants()?.staking_contract)).ok_or_else(|| {
+    config.total_supply().checked_sub(balance_of(&deps,&config.constants()?.staking_contract.unwrap())).ok_or_else(|| {
         StdError::generic_err("Nope, not possible to get the total cicrulatin supply, weird...")
     })
 }
@@ -213,6 +200,47 @@ pub fn rebase<S: Storage, A: Api, Q: Querier>(
 
     //TODO We may need to send the totalsupply back to the staking contract
 }
+pub fn initialize<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    staking_contract : HumanAddr
+) -> StdResult<HandleResponse> {
+
+    let mut config = Config::from_storage(&mut deps.storage);
+    let mut consts = config.constants()?;
+    check_if_admin(&config,&env.message.sender)?;
+    if let Some(_) = config.constants()?.staking_contract {
+        return Err(StdError::generic_err(
+            "You can't intialize the contact twice",
+        ));
+    }
+    consts.staking_contract = Some(staking_contract.clone());
+    let gons_per_fragment = consts.gons_per_fragment.clone();
+    config.set_constants(&consts)?;
+
+    let canon_staking_contract = deps.api.canonical_address(&staking_contract)?;
+    let canon_admin = deps.api.canonical_address(&env.message.sender)?;
+    let mut gon_balances = GonBalances::from_storage(&mut deps.storage);
+    gon_balances.set_account_gon_balance(&canon_staking_contract, get_total_gons());
+
+    store_mint(
+        &mut deps.storage,
+        &canon_admin,
+        &canon_staking_contract,
+        Uint128(balance_for_gons(U256::from_dec_str(&gons_per_fragment).unwrap(),get_total_gons())),
+        consts.symbol.clone(),
+        Some("Initial Gon Balance".to_string()),
+        &env.block,
+    )?;
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::Initialize { status: Success })?),
+    })
+
+}
+
 
 fn query_circulating_supply<S: Storage, A: Api, Q: Querier>(
     deps: & Extern<S, A, Q>
@@ -311,6 +339,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::BatchSendFrom { actions, .. } => try_batch_send_from(deps, env, actions),
         
         HandleMsg::Rebase { profit, epoch } => rebase(deps,env,profit,epoch),
+        HandleMsg::Initialize { staking_contract,.. } => initialize(deps,env,staking_contract),
 
         // Other
         HandleMsg::ChangeAdmin { address, .. } => change_admin(deps, env, address),
@@ -1236,7 +1265,7 @@ fn is_admin<S: Storage>(config: &Config<S>, account: &HumanAddr) -> StdResult<bo
 
 fn is_staking_contract<S: Storage>(config: &Config<S>, account: &HumanAddr) -> StdResult<bool> {
     let consts = config.constants()?;
-    if &consts.staking_contract != account {
+    if &consts.staking_contract.unwrap() != account {
         return Ok(false);
     }
 

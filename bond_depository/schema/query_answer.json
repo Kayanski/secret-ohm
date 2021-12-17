@@ -5,149 +5,85 @@
     {
       "type": "object",
       "required": [
-        "token_info"
+        "contract_info"
       ],
       "properties": {
-        "token_info": {
+        "contract_info": {
           "type": "object",
           "required": [
-            "decimals",
-            "name",
-            "symbol"
+            "admin",
+            "dao",
+            "last_decay",
+            "ohm",
+            "principle",
+            "total_debt",
+            "treasury"
           ],
           "properties": {
-            "decimals": {
-              "type": "integer",
-              "format": "uint8",
-              "minimum": 0.0
-            },
-            "name": {
-              "type": "string"
-            },
-            "symbol": {
-              "type": "string"
-            },
-            "total_supply": {
+            "adjustment": {
               "anyOf": [
                 {
-                  "$ref": "#/definitions/Uint128"
+                  "$ref": "#/definitions/Adjust"
                 },
                 {
                   "type": "null"
                 }
               ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "token_config"
-      ],
-      "properties": {
-        "token_config": {
-          "type": "object",
-          "required": [
-            "burn_enabled",
-            "deposit_enabled",
-            "mint_enabled",
-            "public_total_supply",
-            "redeem_enabled"
-          ],
-          "properties": {
-            "burn_enabled": {
-              "type": "boolean"
             },
-            "deposit_enabled": {
-              "type": "boolean"
-            },
-            "mint_enabled": {
-              "type": "boolean"
-            },
-            "public_total_supply": {
-              "type": "boolean"
-            },
-            "redeem_enabled": {
-              "type": "boolean"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "contract_status"
-      ],
-      "properties": {
-        "contract_status": {
-          "type": "object",
-          "required": [
-            "status"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/definitions/ContractStatusLevel"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "exchange_rate"
-      ],
-      "properties": {
-        "exchange_rate": {
-          "type": "object",
-          "required": [
-            "denom",
-            "rate"
-          ],
-          "properties": {
-            "denom": {
-              "type": "string"
-            },
-            "rate": {
-              "$ref": "#/definitions/Uint128"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "allowance"
-      ],
-      "properties": {
-        "allowance": {
-          "type": "object",
-          "required": [
-            "allowance",
-            "owner",
-            "spender"
-          ],
-          "properties": {
-            "allowance": {
-              "$ref": "#/definitions/Uint128"
-            },
-            "expiration": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint64",
-              "minimum": 0.0
-            },
-            "owner": {
+            "admin": {
               "$ref": "#/definitions/HumanAddr"
             },
-            "spender": {
+            "bond_calculator": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Contract"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dao": {
               "$ref": "#/definitions/HumanAddr"
+            },
+            "last_decay": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "ohm": {
+              "$ref": "#/definitions/Contract"
+            },
+            "principle": {
+              "$ref": "#/definitions/Contract"
+            },
+            "staking": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Contract"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "terms": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Terms"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "total_debt": {
+              "type": "integer",
+              "format": "uint128",
+              "minimum": 0.0
+            },
+            "treasury": {
+              "$ref": "#/definitions/Contract"
             }
           }
         }
@@ -156,16 +92,16 @@
     {
       "type": "object",
       "required": [
-        "balance"
+        "max_payout"
       ],
       "properties": {
-        "balance": {
+        "max_payout": {
           "type": "object",
           "required": [
-            "amount"
+            "payout"
           ],
           "properties": {
-            "amount": {
+            "payout": {
               "$ref": "#/definitions/Uint128"
             }
           }
@@ -175,28 +111,17 @@
     {
       "type": "object",
       "required": [
-        "transfer_history"
+        "payout_for"
       ],
       "properties": {
-        "transfer_history": {
+        "payout_for": {
           "type": "object",
           "required": [
-            "txs"
+            "payout"
           ],
           "properties": {
-            "total": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint64",
-              "minimum": 0.0
-            },
-            "txs": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/Tx"
-              }
+            "payout": {
+              "$ref": "#/definitions/Uint128"
             }
           }
         }
@@ -205,28 +130,185 @@
     {
       "type": "object",
       "required": [
-        "transaction_history"
+        "bond_price"
       ],
       "properties": {
-        "transaction_history": {
+        "bond_price": {
           "type": "object",
           "required": [
-            "txs"
+            "price"
           ],
           "properties": {
-            "total": {
-              "type": [
-                "integer",
-                "null"
-              ],
+            "price": {
+              "$ref": "#/definitions/Uint128"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "bond_price_in_usd"
+      ],
+      "properties": {
+        "bond_price_in_usd": {
+          "type": "object",
+          "required": [
+            "price"
+          ],
+          "properties": {
+            "price": {
+              "$ref": "#/definitions/Uint128"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "debt_ratio"
+      ],
+      "properties": {
+        "debt_ratio": {
+          "type": "object",
+          "required": [
+            "ratio"
+          ],
+          "properties": {
+            "ratio": {
+              "$ref": "#/definitions/Uint128"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "standardized_debt_ratio"
+      ],
+      "properties": {
+        "standardized_debt_ratio": {
+          "type": "object",
+          "required": [
+            "ratio"
+          ],
+          "properties": {
+            "ratio": {
+              "$ref": "#/definitions/Uint128"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "current_debt"
+      ],
+      "properties": {
+        "current_debt": {
+          "type": "object",
+          "required": [
+            "debt"
+          ],
+          "properties": {
+            "debt": {
+              "$ref": "#/definitions/Uint128"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "debt_decay"
+      ],
+      "properties": {
+        "debt_decay": {
+          "type": "object",
+          "required": [
+            "decay"
+          ],
+          "properties": {
+            "decay": {
+              "$ref": "#/definitions/Uint128"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "bond"
+      ],
+      "properties": {
+        "bond": {
+          "type": "object",
+          "required": [
+            "last_block",
+            "payout",
+            "price_paid",
+            "vesting"
+          ],
+          "properties": {
+            "last_block": {
+              "type": "integer",
               "format": "uint64",
               "minimum": 0.0
             },
-            "txs": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/RichTx"
-              }
+            "payout": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "price_paid": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "vesting": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "percent_vested_for"
+      ],
+      "properties": {
+        "percent_vested_for": {
+          "type": "object",
+          "required": [
+            "percent"
+          ],
+          "properties": {
+            "percent": {
+              "$ref": "#/definitions/Uint128"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "pending_payout_for"
+      ],
+      "properties": {
+        "pending_payout_for": {
+          "type": "object",
+          "required": [
+            "payout"
+          ],
+          "properties": {
+            "payout": {
+              "$ref": "#/definitions/Uint128"
             }
           }
         }
@@ -250,245 +332,104 @@
           }
         }
       }
-    },
-    {
-      "type": "object",
-      "required": [
-        "minters"
-      ],
-      "properties": {
-        "minters": {
-          "type": "object",
-          "required": [
-            "minters"
-          ],
-          "properties": {
-            "minters": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/HumanAddr"
-              }
-            }
-          }
-        }
-      }
     }
   ],
   "definitions": {
-    "Coin": {
+    "Adjust": {
       "type": "object",
       "required": [
-        "amount",
-        "denom"
+        "add",
+        "buffer",
+        "last_block",
+        "rate",
+        "target"
       ],
       "properties": {
-        "amount": {
-          "$ref": "#/definitions/Uint128"
+        "add": {
+          "type": "boolean"
         },
-        "denom": {
+        "buffer": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "last_block": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "rate": {
+          "type": "integer",
+          "format": "uint128",
+          "minimum": 0.0
+        },
+        "target": {
+          "type": "integer",
+          "format": "uint128",
+          "minimum": 0.0
+        }
+      }
+    },
+    "Contract": {
+      "type": "object",
+      "required": [
+        "address",
+        "code_hash"
+      ],
+      "properties": {
+        "address": {
+          "$ref": "#/definitions/HumanAddr"
+        },
+        "code_hash": {
           "type": "string"
         }
       }
     },
-    "ContractStatusLevel": {
-      "type": "string",
-      "enum": [
-        "normal_run",
-        "stop_all_but_redeems",
-        "stop_all"
-      ]
-    },
     "HumanAddr": {
       "type": "string"
     },
-    "RichTx": {
+    "Terms": {
       "type": "object",
       "required": [
-        "action",
-        "block_height",
-        "block_time",
-        "coins",
-        "id"
+        "control_variable",
+        "fee",
+        "max_debt",
+        "max_payout",
+        "minimum_price",
+        "vesting_term"
       ],
       "properties": {
-        "action": {
-          "$ref": "#/definitions/TxAction"
+        "control_variable": {
+          "type": "integer",
+          "format": "uint128",
+          "minimum": 0.0
         },
-        "block_height": {
+        "fee": {
+          "type": "integer",
+          "format": "uint128",
+          "minimum": 0.0
+        },
+        "max_debt": {
+          "type": "integer",
+          "format": "uint128",
+          "minimum": 0.0
+        },
+        "max_payout": {
+          "type": "integer",
+          "format": "uint128",
+          "minimum": 0.0
+        },
+        "minimum_price": {
+          "type": "integer",
+          "format": "uint128",
+          "minimum": 0.0
+        },
+        "vesting_term": {
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
-        },
-        "block_time": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        },
-        "coins": {
-          "$ref": "#/definitions/Coin"
-        },
-        "id": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        },
-        "memo": {
-          "type": [
-            "string",
-            "null"
-          ]
         }
       }
-    },
-    "Tx": {
-      "type": "object",
-      "required": [
-        "coins",
-        "from",
-        "id",
-        "receiver",
-        "sender"
-      ],
-      "properties": {
-        "block_height": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0.0
-        },
-        "block_time": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0.0
-        },
-        "coins": {
-          "$ref": "#/definitions/Coin"
-        },
-        "from": {
-          "$ref": "#/definitions/HumanAddr"
-        },
-        "id": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        },
-        "memo": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "receiver": {
-          "$ref": "#/definitions/HumanAddr"
-        },
-        "sender": {
-          "$ref": "#/definitions/HumanAddr"
-        }
-      }
-    },
-    "TxAction": {
-      "anyOf": [
-        {
-          "type": "object",
-          "required": [
-            "transfer"
-          ],
-          "properties": {
-            "transfer": {
-              "type": "object",
-              "required": [
-                "from",
-                "recipient",
-                "sender"
-              ],
-              "properties": {
-                "from": {
-                  "$ref": "#/definitions/HumanAddr"
-                },
-                "recipient": {
-                  "$ref": "#/definitions/HumanAddr"
-                },
-                "sender": {
-                  "$ref": "#/definitions/HumanAddr"
-                }
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "required": [
-            "mint"
-          ],
-          "properties": {
-            "mint": {
-              "type": "object",
-              "required": [
-                "minter",
-                "recipient"
-              ],
-              "properties": {
-                "minter": {
-                  "$ref": "#/definitions/HumanAddr"
-                },
-                "recipient": {
-                  "$ref": "#/definitions/HumanAddr"
-                }
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "required": [
-            "burn"
-          ],
-          "properties": {
-            "burn": {
-              "type": "object",
-              "required": [
-                "burner",
-                "owner"
-              ],
-              "properties": {
-                "burner": {
-                  "$ref": "#/definitions/HumanAddr"
-                },
-                "owner": {
-                  "$ref": "#/definitions/HumanAddr"
-                }
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "required": [
-            "deposit"
-          ],
-          "properties": {
-            "deposit": {
-              "type": "object"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "required": [
-            "redeem"
-          ],
-          "properties": {
-            "redeem": {
-              "type": "object"
-            }
-          }
-        }
-      ]
     },
     "Uint128": {
       "type": "string"

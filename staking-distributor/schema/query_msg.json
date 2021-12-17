@@ -5,10 +5,10 @@
     {
       "type": "object",
       "required": [
-        "token_info"
+        "contract_info"
       ],
       "properties": {
-        "token_info": {
+        "contract_info": {
           "type": "object"
         }
       }
@@ -16,70 +16,10 @@
     {
       "type": "object",
       "required": [
-        "token_config"
+        "rate_info"
       ],
       "properties": {
-        "token_config": {
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "contract_status"
-      ],
-      "properties": {
-        "contract_status": {
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "exchange_rate"
-      ],
-      "properties": {
-        "exchange_rate": {
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "allowance"
-      ],
-      "properties": {
-        "allowance": {
-          "type": "object",
-          "required": [
-            "key",
-            "owner",
-            "spender"
-          ],
-          "properties": {
-            "key": {
-              "type": "string"
-            },
-            "owner": {
-              "$ref": "#/definitions/HumanAddr"
-            },
-            "spender": {
-              "$ref": "#/definitions/HumanAddr"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "balance"
-      ],
-      "properties": {
-        "balance": {
+        "rate_info": {
           "type": "object",
           "required": [
             "address",
@@ -99,35 +39,17 @@
     {
       "type": "object",
       "required": [
-        "transfer_history"
+        "next_reward_at"
       ],
       "properties": {
-        "transfer_history": {
+        "next_reward_at": {
           "type": "object",
           "required": [
-            "address",
-            "key",
-            "page_size"
+            "rate"
           ],
           "properties": {
-            "address": {
-              "$ref": "#/definitions/HumanAddr"
-            },
-            "key": {
-              "type": "string"
-            },
-            "page": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint32",
-              "minimum": 0.0
-            },
-            "page_size": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0.0
+            "rate": {
+              "$ref": "#/definitions/Uint128"
             }
           }
         }
@@ -136,48 +58,19 @@
     {
       "type": "object",
       "required": [
-        "transaction_history"
+        "next_reward_for"
       ],
       "properties": {
-        "transaction_history": {
+        "next_reward_for": {
           "type": "object",
           "required": [
-            "address",
-            "key",
-            "page_size"
+            "recipient"
           ],
           "properties": {
-            "address": {
+            "recipient": {
               "$ref": "#/definitions/HumanAddr"
-            },
-            "key": {
-              "type": "string"
-            },
-            "page": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint32",
-              "minimum": 0.0
-            },
-            "page_size": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0.0
             }
           }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "minters"
-      ],
-      "properties": {
-        "minters": {
-          "type": "object"
         }
       }
     },
@@ -307,33 +200,10 @@
         {
           "type": "object",
           "required": [
-            "allowance"
+            "rate_info"
           ],
           "properties": {
-            "allowance": {
-              "type": "object",
-              "required": [
-                "owner",
-                "spender"
-              ],
-              "properties": {
-                "owner": {
-                  "$ref": "#/definitions/HumanAddr"
-                },
-                "spender": {
-                  "$ref": "#/definitions/HumanAddr"
-                }
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "required": [
-            "balance"
-          ],
-          "properties": {
-            "balance": {
+            "rate_info": {
               "type": "object"
             }
           }
@@ -341,62 +211,18 @@
         {
           "type": "object",
           "required": [
-            "transfer_history"
+            "next_reward_for"
           ],
           "properties": {
-            "transfer_history": {
-              "type": "object",
-              "required": [
-                "page_size"
-              ],
-              "properties": {
-                "page": {
-                  "type": [
-                    "integer",
-                    "null"
-                  ],
-                  "format": "uint32",
-                  "minimum": 0.0
-                },
-                "page_size": {
-                  "type": "integer",
-                  "format": "uint32",
-                  "minimum": 0.0
-                }
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "required": [
-            "transaction_history"
-          ],
-          "properties": {
-            "transaction_history": {
-              "type": "object",
-              "required": [
-                "page_size"
-              ],
-              "properties": {
-                "page": {
-                  "type": [
-                    "integer",
-                    "null"
-                  ],
-                  "format": "uint32",
-                  "minimum": 0.0
-                },
-                "page_size": {
-                  "type": "integer",
-                  "format": "uint32",
-                  "minimum": 0.0
-                }
-              }
+            "next_reward_for": {
+              "type": "object"
             }
           }
         }
       ]
+    },
+    "Uint128": {
+      "type": "string"
     }
   }
 }

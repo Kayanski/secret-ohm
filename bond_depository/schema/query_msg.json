@@ -5,10 +5,10 @@
     {
       "type": "object",
       "required": [
-        "token_info"
+        "contract_info"
       ],
       "properties": {
-        "token_info": {
+        "contract_info": {
           "type": "object"
         }
       }
@@ -16,10 +16,10 @@
     {
       "type": "object",
       "required": [
-        "token_config"
+        "max_payout"
       ],
       "properties": {
-        "token_config": {
+        "max_payout": {
           "type": "object"
         }
       }
@@ -27,47 +27,23 @@
     {
       "type": "object",
       "required": [
-        "contract_status"
+        "payout_for"
       ],
       "properties": {
-        "contract_status": {
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "exchange_rate"
-      ],
-      "properties": {
-        "exchange_rate": {
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "allowance"
-      ],
-      "properties": {
-        "allowance": {
+        "payout_for": {
           "type": "object",
           "required": [
-            "key",
-            "owner",
-            "spender"
+            "block_height",
+            "value"
           ],
           "properties": {
-            "key": {
-              "type": "string"
+            "block_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             },
-            "owner": {
-              "$ref": "#/definitions/HumanAddr"
-            },
-            "spender": {
-              "$ref": "#/definitions/HumanAddr"
+            "value": {
+              "$ref": "#/definitions/Uint128"
             }
           }
         }
@@ -76,10 +52,136 @@
     {
       "type": "object",
       "required": [
-        "balance"
+        "bond_price"
       ],
       "properties": {
-        "balance": {
+        "bond_price": {
+          "type": "object",
+          "required": [
+            "block_height"
+          ],
+          "properties": {
+            "block_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "bond_price_in_usd"
+      ],
+      "properties": {
+        "bond_price_in_usd": {
+          "type": "object",
+          "required": [
+            "block_height"
+          ],
+          "properties": {
+            "block_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "debt_ratio"
+      ],
+      "properties": {
+        "debt_ratio": {
+          "type": "object",
+          "required": [
+            "block_height"
+          ],
+          "properties": {
+            "block_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "standardized_debt_ratio"
+      ],
+      "properties": {
+        "standardized_debt_ratio": {
+          "type": "object",
+          "required": [
+            "block_height"
+          ],
+          "properties": {
+            "block_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "current_debt"
+      ],
+      "properties": {
+        "current_debt": {
+          "type": "object",
+          "required": [
+            "block_height"
+          ],
+          "properties": {
+            "block_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "debt_decay"
+      ],
+      "properties": {
+        "debt_decay": {
+          "type": "object",
+          "required": [
+            "block_height"
+          ],
+          "properties": {
+            "block_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "bond_info"
+      ],
+      "properties": {
+        "bond_info": {
           "type": "object",
           "required": [
             "address",
@@ -99,35 +201,27 @@
     {
       "type": "object",
       "required": [
-        "transfer_history"
+        "percent_vested_for"
       ],
       "properties": {
-        "transfer_history": {
+        "percent_vested_for": {
           "type": "object",
           "required": [
             "address",
-            "key",
-            "page_size"
+            "block_height",
+            "key"
           ],
           "properties": {
             "address": {
               "$ref": "#/definitions/HumanAddr"
             },
+            "block_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
             "key": {
               "type": "string"
-            },
-            "page": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint32",
-              "minimum": 0.0
-            },
-            "page_size": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0.0
             }
           }
         }
@@ -136,48 +230,29 @@
     {
       "type": "object",
       "required": [
-        "transaction_history"
+        "pending_payout_for"
       ],
       "properties": {
-        "transaction_history": {
+        "pending_payout_for": {
           "type": "object",
           "required": [
             "address",
-            "key",
-            "page_size"
+            "block_height",
+            "key"
           ],
           "properties": {
             "address": {
               "$ref": "#/definitions/HumanAddr"
             },
+            "block_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
             "key": {
               "type": "string"
-            },
-            "page": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint32",
-              "minimum": 0.0
-            },
-            "page_size": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0.0
             }
           }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "minters"
-      ],
-      "properties": {
-        "minters": {
-          "type": "object"
         }
       }
     },
@@ -307,33 +382,10 @@
         {
           "type": "object",
           "required": [
-            "allowance"
+            "bond_info"
           ],
           "properties": {
-            "allowance": {
-              "type": "object",
-              "required": [
-                "owner",
-                "spender"
-              ],
-              "properties": {
-                "owner": {
-                  "$ref": "#/definitions/HumanAddr"
-                },
-                "spender": {
-                  "$ref": "#/definitions/HumanAddr"
-                }
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "required": [
-            "balance"
-          ],
-          "properties": {
-            "balance": {
+            "bond_info": {
               "type": "object"
             }
           }
@@ -341,26 +393,18 @@
         {
           "type": "object",
           "required": [
-            "transfer_history"
+            "percent_vested_for"
           ],
           "properties": {
-            "transfer_history": {
+            "percent_vested_for": {
               "type": "object",
               "required": [
-                "page_size"
+                "block_height"
               ],
               "properties": {
-                "page": {
-                  "type": [
-                    "integer",
-                    "null"
-                  ],
-                  "format": "uint32",
-                  "minimum": 0.0
-                },
-                "page_size": {
+                "block_height": {
                   "type": "integer",
-                  "format": "uint32",
+                  "format": "uint64",
                   "minimum": 0.0
                 }
               }
@@ -370,26 +414,18 @@
         {
           "type": "object",
           "required": [
-            "transaction_history"
+            "pending_payout_for"
           ],
           "properties": {
-            "transaction_history": {
+            "pending_payout_for": {
               "type": "object",
               "required": [
-                "page_size"
+                "block_height"
               ],
               "properties": {
-                "page": {
-                  "type": [
-                    "integer",
-                    "null"
-                  ],
-                  "format": "uint32",
-                  "minimum": 0.0
-                },
-                "page_size": {
+                "block_height": {
                   "type": "integer",
-                  "format": "uint32",
+                  "format": "uint64",
                   "minimum": 0.0
                 }
               }
@@ -397,6 +433,9 @@
           }
         }
       ]
+    },
+    "Uint128": {
+      "type": "string"
     }
   }
 }

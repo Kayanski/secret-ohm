@@ -254,20 +254,17 @@
     {
       "type": "object",
       "required": [
-        "minters"
+        "circulating_supply"
       ],
       "properties": {
-        "minters": {
+        "circulating_supply": {
           "type": "object",
           "required": [
-            "minters"
+            "circulating_supply"
           ],
           "properties": {
-            "minters": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/HumanAddr"
-              }
+            "circulating_supply": {
+              "$ref": "#/definitions/Uint128"
             }
           }
         }

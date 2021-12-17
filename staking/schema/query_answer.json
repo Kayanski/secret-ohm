@@ -272,6 +272,44 @@
           }
         }
       }
+    },
+    {
+      "type": "object",
+      "required": [
+        "contract_balance"
+      ],
+      "properties": {
+        "contract_balance": {
+          "type": "object",
+          "required": [
+            "amount"
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/definitions/Uint128"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "index"
+      ],
+      "properties": {
+        "index": {
+          "type": "object",
+          "required": [
+            "index"
+          ],
+          "properties": {
+            "index": {
+              "type": "string"
+            }
+          }
+        }
+      }
     }
   ],
   "definitions": {

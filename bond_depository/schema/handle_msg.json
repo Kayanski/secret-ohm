@@ -5,134 +5,172 @@
     {
       "type": "object",
       "required": [
+        "receive"
+      ],
+      "properties": {
+        "receive": {
+          "type": "object",
+          "required": [
+            "amount",
+            "from",
+            "msg",
+            "sender"
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "from": {
+              "$ref": "#/definitions/HumanAddr"
+            },
+            "msg": {
+              "$ref": "#/definitions/Binary"
+            },
+            "sender": {
+              "$ref": "#/definitions/HumanAddr"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "initialize_bond_terms"
+      ],
+      "properties": {
+        "initialize_bond_terms": {
+          "type": "object",
+          "required": [
+            "control_variable",
+            "fee",
+            "initial_debt",
+            "max_debt",
+            "max_payout",
+            "minimum_price",
+            "vesting_term"
+          ],
+          "properties": {
+            "control_variable": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "fee": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "initial_debt": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "max_debt": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "max_payout": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "minimum_price": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "vesting_term": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "set_bond_term"
+      ],
+      "properties": {
+        "set_bond_term": {
+          "type": "object",
+          "required": [
+            "input",
+            "parameter"
+          ],
+          "properties": {
+            "input": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "parameter": {
+              "$ref": "#/definitions/BondParameter"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "set_adjustment"
+      ],
+      "properties": {
+        "set_adjustment": {
+          "type": "object",
+          "required": [
+            "addition",
+            "buffer",
+            "increment",
+            "target"
+          ],
+          "properties": {
+            "addition": {
+              "type": "boolean"
+            },
+            "buffer": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "increment": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "target": {
+              "$ref": "#/definitions/Uint128"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "set_staking"
+      ],
+      "properties": {
+        "set_staking": {
+          "type": "object",
+          "required": [
+            "staking"
+          ],
+          "properties": {
+            "staking": {
+              "$ref": "#/definitions/Contract"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
         "redeem"
       ],
       "properties": {
         "redeem": {
           "type": "object",
           "required": [
-            "amount"
+            "recipient",
+            "stake"
           ],
           "properties": {
-            "amount": {
-              "$ref": "#/definitions/Uint128"
-            },
-            "denom": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "deposit"
-      ],
-      "properties": {
-        "deposit": {
-          "type": "object",
-          "properties": {
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "transfer"
-      ],
-      "properties": {
-        "transfer": {
-          "type": "object",
-          "required": [
-            "amount",
-            "recipient"
-          ],
-          "properties": {
-            "amount": {
-              "$ref": "#/definitions/Uint128"
-            },
-            "memo": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "recipient": {
-              "$ref": "#/definitions/HumanAddr"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "send"
-      ],
-      "properties": {
-        "send": {
-          "type": "object",
-          "required": [
-            "amount",
-            "recipient"
-          ],
-          "properties": {
-            "amount": {
-              "$ref": "#/definitions/Uint128"
-            },
-            "memo": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "msg": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/Binary"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
             "recipient": {
               "$ref": "#/definitions/HumanAddr"
             },
-            "recipient_code_hash": {
-              "type": [
-                "string",
-                "null"
-              ]
+            "stake": {
+              "type": "boolean"
             }
           }
         }
@@ -141,594 +179,17 @@
     {
       "type": "object",
       "required": [
-        "batch_transfer"
+        "recover_lost_token"
       ],
       "properties": {
-        "batch_transfer": {
+        "recover_lost_token": {
           "type": "object",
           "required": [
-            "actions"
+            "token"
           ],
           "properties": {
-            "actions": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/TransferAction"
-              }
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "batch_send"
-      ],
-      "properties": {
-        "batch_send": {
-          "type": "object",
-          "required": [
-            "actions"
-          ],
-          "properties": {
-            "actions": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/SendAction"
-              }
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "burn"
-      ],
-      "properties": {
-        "burn": {
-          "type": "object",
-          "required": [
-            "amount"
-          ],
-          "properties": {
-            "amount": {
-              "$ref": "#/definitions/Uint128"
-            },
-            "memo": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "register_receive"
-      ],
-      "properties": {
-        "register_receive": {
-          "type": "object",
-          "required": [
-            "code_hash"
-          ],
-          "properties": {
-            "code_hash": {
-              "type": "string"
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "create_viewing_key"
-      ],
-      "properties": {
-        "create_viewing_key": {
-          "type": "object",
-          "required": [
-            "entropy"
-          ],
-          "properties": {
-            "entropy": {
-              "type": "string"
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "set_viewing_key"
-      ],
-      "properties": {
-        "set_viewing_key": {
-          "type": "object",
-          "required": [
-            "key"
-          ],
-          "properties": {
-            "key": {
-              "type": "string"
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "increase_allowance"
-      ],
-      "properties": {
-        "increase_allowance": {
-          "type": "object",
-          "required": [
-            "amount",
-            "spender"
-          ],
-          "properties": {
-            "amount": {
-              "$ref": "#/definitions/Uint128"
-            },
-            "expiration": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint64",
-              "minimum": 0.0
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "spender": {
-              "$ref": "#/definitions/HumanAddr"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "decrease_allowance"
-      ],
-      "properties": {
-        "decrease_allowance": {
-          "type": "object",
-          "required": [
-            "amount",
-            "spender"
-          ],
-          "properties": {
-            "amount": {
-              "$ref": "#/definitions/Uint128"
-            },
-            "expiration": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint64",
-              "minimum": 0.0
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "spender": {
-              "$ref": "#/definitions/HumanAddr"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "transfer_from"
-      ],
-      "properties": {
-        "transfer_from": {
-          "type": "object",
-          "required": [
-            "amount",
-            "owner",
-            "recipient"
-          ],
-          "properties": {
-            "amount": {
-              "$ref": "#/definitions/Uint128"
-            },
-            "memo": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "owner": {
-              "$ref": "#/definitions/HumanAddr"
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "recipient": {
-              "$ref": "#/definitions/HumanAddr"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "send_from"
-      ],
-      "properties": {
-        "send_from": {
-          "type": "object",
-          "required": [
-            "amount",
-            "owner",
-            "recipient"
-          ],
-          "properties": {
-            "amount": {
-              "$ref": "#/definitions/Uint128"
-            },
-            "memo": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "msg": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/Binary"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "owner": {
-              "$ref": "#/definitions/HumanAddr"
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "recipient": {
-              "$ref": "#/definitions/HumanAddr"
-            },
-            "recipient_code_hash": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "batch_transfer_from"
-      ],
-      "properties": {
-        "batch_transfer_from": {
-          "type": "object",
-          "required": [
-            "actions"
-          ],
-          "properties": {
-            "actions": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/TransferFromAction"
-              }
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "batch_send_from"
-      ],
-      "properties": {
-        "batch_send_from": {
-          "type": "object",
-          "required": [
-            "actions"
-          ],
-          "properties": {
-            "actions": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/SendFromAction"
-              }
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "burn_from"
-      ],
-      "properties": {
-        "burn_from": {
-          "type": "object",
-          "required": [
-            "amount",
-            "owner"
-          ],
-          "properties": {
-            "amount": {
-              "$ref": "#/definitions/Uint128"
-            },
-            "memo": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "owner": {
-              "$ref": "#/definitions/HumanAddr"
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "batch_burn_from"
-      ],
-      "properties": {
-        "batch_burn_from": {
-          "type": "object",
-          "required": [
-            "actions"
-          ],
-          "properties": {
-            "actions": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/BurnFromAction"
-              }
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "mint"
-      ],
-      "properties": {
-        "mint": {
-          "type": "object",
-          "required": [
-            "amount",
-            "recipient"
-          ],
-          "properties": {
-            "amount": {
-              "$ref": "#/definitions/Uint128"
-            },
-            "memo": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "recipient": {
-              "$ref": "#/definitions/HumanAddr"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "batch_mint"
-      ],
-      "properties": {
-        "batch_mint": {
-          "type": "object",
-          "required": [
-            "actions"
-          ],
-          "properties": {
-            "actions": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/MintAction"
-              }
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "add_minters"
-      ],
-      "properties": {
-        "add_minters": {
-          "type": "object",
-          "required": [
-            "minters"
-          ],
-          "properties": {
-            "minters": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/HumanAddr"
-              }
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "remove_minters"
-      ],
-      "properties": {
-        "remove_minters": {
-          "type": "object",
-          "required": [
-            "minters"
-          ],
-          "properties": {
-            "minters": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/HumanAddr"
-              }
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "set_minters"
-      ],
-      "properties": {
-        "set_minters": {
-          "type": "object",
-          "required": [
-            "minters"
-          ],
-          "properties": {
-            "minters": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/HumanAddr"
-              }
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
+            "token": {
+              "$ref": "#/definitions/Contract"
             }
           }
         }
@@ -762,31 +223,6 @@
     {
       "type": "object",
       "required": [
-        "set_contract_status"
-      ],
-      "properties": {
-        "set_contract_status": {
-          "type": "object",
-          "required": [
-            "level"
-          ],
-          "properties": {
-            "level": {
-              "$ref": "#/definitions/ContractStatusLevel"
-            },
-            "padding": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
         "revoke_permit"
       ],
       "properties": {
@@ -796,6 +232,12 @@
             "permit_name"
           ],
           "properties": {
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "permit_name": {
               "type": "string"
             }
@@ -809,182 +251,32 @@
       "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>",
       "type": "string"
     },
-    "BurnFromAction": {
-      "type": "object",
-      "required": [
-        "amount",
-        "owner"
-      ],
-      "properties": {
-        "amount": {
-          "$ref": "#/definitions/Uint128"
-        },
-        "memo": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "owner": {
-          "$ref": "#/definitions/HumanAddr"
-        }
-      }
-    },
-    "ContractStatusLevel": {
+    "BondParameter": {
       "type": "string",
       "enum": [
-        "normal_run",
-        "stop_all_but_redeems",
-        "stop_all"
+        "vesting",
+        "payout",
+        "fee",
+        "debt"
       ]
+    },
+    "Contract": {
+      "type": "object",
+      "required": [
+        "address",
+        "code_hash"
+      ],
+      "properties": {
+        "address": {
+          "$ref": "#/definitions/HumanAddr"
+        },
+        "code_hash": {
+          "type": "string"
+        }
+      }
     },
     "HumanAddr": {
       "type": "string"
-    },
-    "MintAction": {
-      "type": "object",
-      "required": [
-        "amount",
-        "recipient"
-      ],
-      "properties": {
-        "amount": {
-          "$ref": "#/definitions/Uint128"
-        },
-        "memo": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "recipient": {
-          "$ref": "#/definitions/HumanAddr"
-        }
-      }
-    },
-    "SendAction": {
-      "type": "object",
-      "required": [
-        "amount",
-        "recipient"
-      ],
-      "properties": {
-        "amount": {
-          "$ref": "#/definitions/Uint128"
-        },
-        "memo": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "msg": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/Binary"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "recipient": {
-          "$ref": "#/definitions/HumanAddr"
-        },
-        "recipient_code_hash": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
-    "SendFromAction": {
-      "type": "object",
-      "required": [
-        "amount",
-        "owner",
-        "recipient"
-      ],
-      "properties": {
-        "amount": {
-          "$ref": "#/definitions/Uint128"
-        },
-        "memo": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "msg": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/Binary"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "owner": {
-          "$ref": "#/definitions/HumanAddr"
-        },
-        "recipient": {
-          "$ref": "#/definitions/HumanAddr"
-        },
-        "recipient_code_hash": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
-    "TransferAction": {
-      "type": "object",
-      "required": [
-        "amount",
-        "recipient"
-      ],
-      "properties": {
-        "amount": {
-          "$ref": "#/definitions/Uint128"
-        },
-        "memo": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "recipient": {
-          "$ref": "#/definitions/HumanAddr"
-        }
-      }
-    },
-    "TransferFromAction": {
-      "type": "object",
-      "required": [
-        "amount",
-        "owner",
-        "recipient"
-      ],
-      "properties": {
-        "amount": {
-          "$ref": "#/definitions/Uint128"
-        },
-        "memo": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "owner": {
-          "$ref": "#/definitions/HumanAddr"
-        },
-        "recipient": {
-          "$ref": "#/definitions/HumanAddr"
-        }
-      }
     },
     "Uint128": {
       "type": "string"
