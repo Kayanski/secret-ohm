@@ -5,9 +5,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::batch;
 use crate::transaction_history::{RichTx, Tx};
+use crate::rebase_history::Rebase;
 use crate::viewing_key::ViewingKey;
 use cosmwasm_std::{Binary, HumanAddr, StdError, StdResult, Uint128};
 use secret_toolkit::permit::Permit;
+
 
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
@@ -318,10 +320,20 @@ pub enum QueryMsg {
         page: Option<u32>,
         page_size: u32,
     },
+    RebaseHistory {
+        page: Option<u32>,
+        page_size: u32,
+    },
     CirculatingSupply{},
     WithPermit {
         permit: Permit,
         query: QueryWithPermit,
+    },
+    GonsForBalance{
+        amount: Uint128
+    },
+    BalanceForGons{
+        gons: String
     },
 }
 
@@ -402,12 +414,22 @@ pub enum QueryAnswer {
         txs: Vec<RichTx>,
         total: Option<u64>,
     },
+    RebaseHistory {
+        rebases: Vec<Rebase>,
+        total: Option<u64>,
+    },
     ViewingKeyError {
         msg: String,
     },
     CirculatingSupply {
         circulating_supply: Uint128,
     },
+    GonsForBalance{
+        gons: String,
+    },
+    BalanceForGons{
+        amount: Uint128,
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]

@@ -10,19 +10,19 @@ use cosmwasm_std::{
 use crate::msg::QueryWithPermit;
 use crate::msg::{
     space_pad, HandleAnswer, HandleMsg, InitMsg, QueryAnswer, QueryMsg,
-    ResponseStatus::Success, ResponseStatus::Failure, TreasuryHandleMsg, OhmQueryMsg, 
-    TotalSupplyResponse,
+    ResponseStatus::Success, ResponseStatus::Failure, TreasuryHandleMsg, 
     RESPONSE_BLOCK_SIZE
 };
 use crate::rand::sha_256;
 use crate::state::{
     read_viewing_key, 
     write_viewing_key, Config, Constants, ReadonlyConfig,
-    Info, Adjust
+    Info, Adjust,
 };
+use secret_toolkit::snip20;
 use crate::viewing_key::{ViewingKey, VIEWING_KEY_SIZE};
 use secret_toolkit::permit::{validate, Permission, Permit, RevokedPermits};
-use secret_toolkit::utils::{HandleCallback, Query};
+use secret_toolkit::utils::{HandleCallback};
 
 pub const PREFIX_REVOKED_PERMITS: &str = "revoked_permits";
 
@@ -126,7 +126,7 @@ pub fn adjust<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<()>{
     let mut config = Config::from_storage(&mut deps.storage);
     let mut info = config.rate_info();
-    let mut adjustment = config.adjustment(index);
+    let mut adjustment = config.adjustment(index)?;
     if adjustment.rate != 0{
         if adjustment.add{
             info[index].rate += adjustment.rate;
@@ -214,13 +214,13 @@ pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryM
 
 fn next_reward_at<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, rate: u128) -> StdResult<u128>{
     let consts = ReadonlyConfig::from_storage(&deps.storage).constants()?;
-    let total_supply_query_msg = OhmQueryMsg::GetTotalSupply{};
-    let total_supply_response: TotalSupplyResponse = total_supply_query_msg.query(
+    let total_supply_response = snip20::token_info_query(
         &deps.querier,
+        RESPONSE_BLOCK_SIZE,
         consts.ohm.code_hash.clone(),
         consts.ohm.address.clone(),
     )?;
-    total_supply_response.total_supply.u128()
+    total_supply_response.total_supply.unwrap_or_default().u128()
     .checked_mul(rate).ok_or_else(||{
         StdError::generic_err("The reward rate is too high, sorry")
     })?
@@ -231,7 +231,7 @@ fn next_reward_at<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, rate: 
 
 fn next_reward_for<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, recipient: HumanAddr) -> StdResult<u128>{
     let config = ReadonlyConfig::from_storage(&deps.storage);
-    next_reward_at(deps,config.info_by_recipient(recipient).rate)
+    next_reward_at(deps,config.info_by_recipient(recipient)?.rate)
 }
 
 
@@ -320,7 +320,7 @@ fn query_rate_info<S: ReadonlyStorage>(storage: &S, recipient: HumanAddr) -> Que
 
     to_binary(&QueryAnswer::RateInfo {
         recipient: recipient.clone(),
-        rate: Uint128(config.info_by_recipient(recipient).rate)
+        rate: Uint128(config.info_by_recipient(recipient)?.rate)
     })
 }
 
@@ -430,4 +430,117 @@ fn check_if_admin<S: Storage>(config: &Config<S>, account: &HumanAddr) -> StdRes
     }
 
     Ok(())
+}
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::msg::ResponseStatus;
+    use cosmwasm_std::testing::*;
+    use cosmwasm_std::{from_binary, BlockInfo, ContractInfo, MessageInfo, QueryResponse, WasmMsg};
+    use crate::state::{Contract};
+    use std::any::Any;
+
+    // Helper functions
+
+    fn init_helper(
+        
+    ) -> (
+        StdResult<InitResponse>,
+        Extern<MockStorage, MockApi, MockQuerier>,
+    ) {
+        let mut deps = mock_dependencies(20, &[]);
+        let env = mock_env("admin", &[]);
+
+        let init_msg = InitMsg {
+            treasury: Contract{address:HumanAddr("treasury".to_string()),code_hash:"Complicated_hash".to_string()},
+            ohm: Contract{address:HumanAddr("ohm".to_string()),code_hash:"Complicated_hash".to_string()},
+            epoch_length: 235,
+            next_epoch_block: 459,
+            admin: None,
+            prng_seed: Binary::from("lolz fun yay".as_bytes()),
+        };
+
+        (init(&mut deps, env, init_msg), deps)
+    }
+    fn extract_error_msg<T: Any>(error: StdResult<T>) -> String {
+        match error {
+            Ok(response) => {
+                let bin_err = (&response as &dyn Any)
+                    .downcast_ref::<QueryResponse>()
+                    .expect("An error was expected, but no error could be extracted");
+                match from_binary(bin_err).unwrap() {
+                    QueryAnswer::ViewingKeyError { msg } => msg,
+                    _ => panic!("Unexpected query answer"),
+                }
+            }
+            Err(err) => match err {
+                StdError::GenericErr { msg, .. } => msg,
+                _ => panic!("Unexpected result from init"),
+            },
+        }
+    }
+
+    fn ensure_success(handle_result: HandleResponse) -> bool {
+        let handle_result: HandleAnswer = from_binary(&handle_result.data.unwrap()).unwrap();
+
+        match handle_result {
+            HandleAnswer::Distribute { status }
+            | HandleAnswer::AddRecipient{ status }
+            | HandleAnswer::RemoveRecipient{ status }
+            | HandleAnswer::SetAdjustment{ status }
+            | HandleAnswer::SetViewingKey { status }
+            | HandleAnswer::ChangeAdmin { status }
+            | HandleAnswer::SetContractStatus { status }
+            | HandleAnswer::RevokePermit { status } => {
+                matches!(status, ResponseStatus::Success { .. })
+            },
+            _ => panic!(
+                "HandleAnswer not supported for success extraction: {:?}",
+                handle_result
+            ),
+        }
+    }
+
+     #[test]
+    fn test_init_sanity() {
+        let (init_result, deps) = init_helper();
+        assert_eq!(init_result.unwrap(), InitResponse::default());
+
+        let config = ReadonlyConfig::from_storage(&deps.storage);
+        let consts = config.constants().unwrap();
+        assert_eq!(consts.treasury,Contract{address:HumanAddr("treasury".to_string()),code_hash:"Complicated_hash".to_string()});
+        assert_eq!(consts.ohm,Contract{address:HumanAddr("ohm".to_string()),code_hash:"Complicated_hash".to_string()});
+        assert_eq!(consts.epoch_length, 235);
+        assert_eq!(consts.next_epoch_block, 459);
+        assert_eq!(consts.admin, HumanAddr("admin".to_string()));
+        assert_eq!(
+            consts.prng_seed,
+            sha_256("lolz fun yay".to_owned().as_bytes())
+        );
+    }
+
+    #[test]
+    fn test_distributor_contract(){
+        let (init_result, mut deps) = init_helper();
+        assert!(
+            init_result.is_ok(),
+            "Init failed: {}",
+            init_result.err().unwrap()
+        );
+        let handle_msg = HandleMsg::AddRecipient {
+            recipient : HumanAddr("gloubi".to_string()),
+            reward_rate : Uint128(125),
+        };
+
+        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        let result = handle_result.unwrap();
+
+        let config = ReadonlyConfig::from_storage(&deps.storage);
+        println!("{:?}",config.rate_info());
+        //println!("{:?}",from_binary::<HandleAnswer>(&result.data.clone().unwrap()).unwrap());
+        assert!(ensure_success(result));
+    }
 }

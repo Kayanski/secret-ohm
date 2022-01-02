@@ -102,11 +102,11 @@ pub enum HandleAnswer {
     },
     Deposit{
         status: ResponseStatus,
-        payout: u128
+        payout: Uint128
     },
     Redeem{
         status: ResponseStatus,
-        payout: u128
+        payout: Uint128
     },
     StakeOrSend{
         status: ResponseStatus,
@@ -233,7 +233,7 @@ pub enum QueryAnswer {
         adjustment: Option<Adjust>,
 
         admin: HumanAddr,
-        total_debt: u128,
+        total_debt: Uint128,
         last_decay: u64
     },
     MaxPayout{
@@ -308,7 +308,7 @@ pub enum TreasuryHandleMsg{
         amount : Uint128
     },
     Deposit{
-        profit: u128,
+        profit: Uint128,
     }
 }
 
@@ -329,22 +329,6 @@ impl HandleCallback for StakingHandleMsg{
     const BLOCK_SIZE: usize = RESPONSE_BLOCK_SIZE;
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum OhmQueryMsg{
-    GetTotalSupply{
-
-    },
-}
-
-impl Query for OhmQueryMsg {
-    const BLOCK_SIZE: usize = RESPONSE_BLOCK_SIZE;
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct TotalSupplyResponse{
-    pub total_supply: Uint128,
-}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -359,8 +343,12 @@ impl Query for BondCalculatorQueryMsg {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct MarkdownResponse{
+pub struct Markdown{
     pub price: Uint128,
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct MarkdownResponse{
+    pub markdown: Markdown,
 }
 
    
@@ -379,15 +367,13 @@ impl Query for TreasuryQueryMsg {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct ValueOfResponse{
+pub struct ValueOf{
     pub value: Uint128,
 }
-
-
-
-
-
-
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct ValueOfResponse{
+    pub value_of: ValueOf,
+}
 
 
 pub fn status_level_to_u8(status_level: ContractStatusLevel) -> u8 {

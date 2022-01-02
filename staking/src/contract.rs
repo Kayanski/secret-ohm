@@ -1,13 +1,11 @@
 /// This contract implements SNIP-20 standard:
 /// https://github.com/SecretFoundation/SNIPs/blob/master/SNIP-20.md
 use cosmwasm_std::{
-    log, to_binary, from_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Env, Extern,
+    log, to_binary, from_binary, Api, Binary, Env, Extern,
     HandleResponse, HumanAddr, InitResponse, Querier, QueryResult, ReadonlyStorage, StdError,
     StdResult, Storage, Uint128,
 };
 
-use crate::batch;
-use crate::msg::QueryWithPermit;
 use crate::msg::{
     space_pad, ContractStatusLevel, HandleAnswer, HandleMsg, ReceiveMsg, InitMsg, QueryAnswer, QueryMsg,
     ResponseStatus::Success, 
@@ -16,18 +14,13 @@ use crate::msg::{
     IndexResponse
 };
 use crate::rand::sha_256;
-use crate::receiver::Snip20ReceiveMsg;
 use secret_toolkit::snip20;
 use crate::state::{
-    get_receiver_hash, read_allowance, read_viewing_key, set_receiver_hash, write_allowance,
-    write_viewing_key, Balances, Config, Constants, ReadonlyBalances, ReadonlyConfig, Epoch, Claim,
+    read_viewing_key, set_receiver_hash,
+    write_viewing_key, Config, Constants, ReadonlyConfig, Epoch, Claim,
     ConfigContracts, ContractType, Contract
 };
-use crate::transaction_history::{
-    get_transfers, get_txs, store_burn, store_deposit, store_mint, store_redeem, store_transfer,
-};
 use crate::viewing_key::{ViewingKey, VIEWING_KEY_SIZE};
-use secret_toolkit::permit::{validate, Permission, Permit, RevokedPermits};
 use secret_toolkit::utils::{HandleCallback, Query};
 
 use primitive_types::U256;
@@ -59,9 +52,9 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             length: msg.epoch_length.clone(),
             number: msg.first_epoch_number.clone(),
             end_block: msg.first_epoch_block.clone(),
-            distribute: 0
+            distribute: Uint128(0)
         },
-        total_bonus:0,
+        total_bonus:Uint128(0),
         warmup_period:0,
         contract_address:env.contract.address,
     })?;
@@ -105,14 +98,14 @@ pub fn stake<S: Storage, A: Api, Q: Querier>(
         &deps.querier,
         consts.sohm.code_hash.clone(),
         consts.sohm.address.clone(),
-    ).unwrap();
-    let gons = U256::from_dec_str(&gons_for_balance_response.gons).unwrap();
+    )?;
+    let gons = U256::from_dec_str(&gons_for_balance_response.gons_for_balance.gons).unwrap();
 
 
     config.set_warmup_info(&canon_recipient,Claim{
-        deposit: claim_info.deposit.checked_add(amount).ok_or_else(|| {
+        deposit: Uint128(claim_info.deposit.u128().checked_add(amount).ok_or_else(|| {
             StdError::generic_err("Sorry, can't deposit, the contract already contains too much sOHM")
-        })?,
+        })?),
         gons: U256::to_string(&U256::from_dec_str(&claim_info.gons).unwrap().checked_add(gons).ok_or_else(|| {
             StdError::generic_err("Sorry, can't deposit, the contract already contains too much sOHM")
         })?),
@@ -182,14 +175,14 @@ pub fn rebase<S: Storage, A: Api, Q: Querier>(
                 &deps.querier,
                 consts.sohm.code_hash.clone(),
                 consts.sohm.address.clone(),
-            ).unwrap();
-            circulating_supply_response.circulating_supply.u128()
+            )?;
+            circulating_supply_response.circulating_supply.circulating_supply.u128()
         };
 
         if balance <= staked{
-            consts.epoch.distribute = 0;
+            consts.epoch.distribute = Uint128(0);
         }else{
-            consts.epoch.distribute = balance - staked;
+            consts.epoch.distribute = Uint128(balance - staked);
         }
         
         let mut config = Config::from_storage(&mut deps.storage); 
@@ -214,7 +207,7 @@ pub fn contract_balance<S: Storage, A: Api, Q: Querier>(
         RESPONSE_BLOCK_SIZE,
         constants.ohm.code_hash,
         constants.ohm.address
-    )?.amount.u128().checked_add(constants.total_bonus).ok_or_else(|| {
+    )?.amount.u128().checked_add(constants.total_bonus.u128()).ok_or_else(|| {
         StdError::generic_err("The contract is too rich for you, sorry")
     })
 }
@@ -247,11 +240,11 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
             &deps.querier,
             config.constants()?.sohm.code_hash.clone(),
             config.constants()?.sohm.address.clone(),
-        ).unwrap();
+        )?;
         //We send the retrieve message from the warmup contract
         let retrieve_msg = WarmupContractHandleMsg::Retrieve{
             address: recipient,
-            amount: balance_for_gons_response.amount
+            amount: balance_for_gons_response.balance_for_gons.amount
         };
         messages.push(
             retrieve_msg.to_cosmos_msg( 
@@ -291,7 +284,7 @@ pub fn forfeit<S: Storage, A: Api, Q: Querier>(
 //We send the retrieve message from the warmup contract
     let retrieve_msg = WarmupContractHandleMsg::Retrieve{
         address: env.contract.address.clone(),
-        amount: balance_for_gons_response.amount
+        amount: balance_for_gons_response.balance_for_gons.amount
     };
     messages.push(
         retrieve_msg.to_cosmos_msg( 
@@ -304,7 +297,7 @@ pub fn forfeit<S: Storage, A: Api, Q: Querier>(
     //Send funds back to the address
     messages.push(snip20::transfer_msg(
         env.message.sender.clone(),
-        Uint128(claim_info.deposit),
+        claim_info.deposit,
         None,
         RESPONSE_BLOCK_SIZE,
         config.constants()?.ohm.code_hash.clone(),
@@ -374,7 +367,7 @@ pub fn index<S: Storage, A: Api, Q: Querier>(
         config.constants()?.sohm.code_hash.clone(),
         config.constants()?.sohm.address.clone(),
     )?;
-    Ok(index_response.index)
+    Ok(index_response.index.index)
 }
 
 fn query_index<S: Storage, A: Api, Q: Querier>(
@@ -394,9 +387,9 @@ pub fn give_lock_bonus<S: Storage, A: Api, Q: Querier>(
     let mut config = Config::from_storage(&mut deps.storage);
     let mut constants = config.constants()?;
     check_equal(&env.message.sender, &config.contracts()?.locker.address)?;
-    constants.total_bonus = constants.total_bonus.checked_add(amount.u128()).ok_or_else(|| {
+    constants.total_bonus = Uint128(constants.total_bonus.u128().checked_add(amount.u128()).ok_or_else(|| {
         StdError::generic_err("Sorry, can't give bonus to the locker contract, too much bonus already")
-    })?;
+    })?);
     config.set_constants(&constants)?;
     let messages = vec![
         snip20::transfer_msg(
@@ -424,9 +417,9 @@ pub fn return_lock_bonus<S: Storage, A: Api, Q: Querier>(
     let mut constants = config.constants()?;
     check_equal(&sender, &config.contracts()?.locker.address)?;
 
-    constants.total_bonus = constants.total_bonus.checked_sub(amount).ok_or_else(|| {
+    constants.total_bonus = Uint128(constants.total_bonus.u128().checked_sub(amount).ok_or_else(|| {
         StdError::generic_err("Sorry, can't return bonus to the locker contract, nothing to give back :/")
-    })?;
+    })?);
     config.set_constants(&constants)?;
 
     Ok(HandleResponse {
@@ -554,7 +547,6 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         // Other
         HandleMsg::ChangeAdmin { address, .. } => change_admin(deps, env, address),
         HandleMsg::SetContractStatus { level, .. } => set_contract_status(deps, env, level),
-        HandleMsg::RevokePermit { permit_name, .. } => revoke_permit(deps, env, permit_name),
 
         //Staking
         HandleMsg::Rebase {..} => rebase(deps, env,),
@@ -579,10 +571,8 @@ pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryM
 
         QueryMsg::ContractBalance {} => query_contract_balance(deps),
         QueryMsg::Index {} => query_index(deps),
-
-
-        /*
         QueryMsg::ContractStatus {} => query_contract_status(&deps.storage),
+        /*
         QueryMsg::WithPermit { permit, query } => permit_queries(deps, permit, query),
         */
         _ => viewing_keys_queries(deps, msg),
@@ -707,38 +697,6 @@ fn set_contract_status<S: Storage, A: Api, Q: Querier>(
 }
 
 
-#[allow(clippy::too_many_arguments)]
-fn try_add_receiver_api_callback<S: ReadonlyStorage>(
-    storage: &S,
-    messages: &mut Vec<CosmosMsg>,
-    recipient: HumanAddr,
-    recipient_code_hash: Option<String>,
-    msg: Option<Binary>,
-    sender: HumanAddr,
-    from: HumanAddr,
-    amount: Uint128,
-    memo: Option<String>,
-) -> StdResult<()> {
-    if let Some(receiver_hash) = recipient_code_hash {
-        let receiver_msg = Snip20ReceiveMsg::new(sender, from, amount, memo, msg);
-        let callback_msg = receiver_msg.into_cosmos_msg(receiver_hash, recipient)?;
-
-        messages.push(callback_msg);
-        return Ok(());
-    }
-
-    let receiver_hash = get_receiver_hash(storage, &recipient);
-    if let Some(receiver_hash) = receiver_hash {
-        let receiver_hash = receiver_hash?;
-        let receiver_msg = Snip20ReceiveMsg::new(sender, from, amount, memo, msg);
-        let callback_msg = receiver_msg.into_cosmos_msg(receiver_hash, recipient)?;
-
-        messages.push(callback_msg);
-    }
-    Ok(())
-}
-
-
 fn try_register_receive<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -755,24 +713,6 @@ fn try_register_receive<S: Storage, A: Api, Q: Querier>(
     Ok(res)
 }
 
-fn revoke_permit<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    permit_name: String,
-) -> StdResult<HandleResponse> {
-    RevokedPermits::revoke_permit(
-        &mut deps.storage,
-        PREFIX_REVOKED_PERMITS,
-        &env.message.sender,
-        &permit_name,
-    );
-
-    Ok(HandleResponse {
-        messages: vec![],
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::RevokePermit { status: Success })?),
-    })
-}
 
 fn is_admin<S: Storage>(config: &Config<S>, account: &HumanAddr) -> StdResult<bool> {
     let consts = config.constants()?;
@@ -802,14 +742,137 @@ fn check_equal(account1: &HumanAddr, account2: &HumanAddr) -> StdResult<()> {
     Ok(())
 }
 
-fn is_valid_name(name: &str) -> bool {
-    let len = name.len();
-    (3..=30).contains(&len)
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::msg::ResponseStatus;
+    use cosmwasm_std::testing::*;
+    use cosmwasm_std::{from_binary};
+    use std::any::Any;
+
+    // Helper functions
+
+    fn init_helper(
+        
+    ) -> (
+        StdResult<InitResponse>,
+        Extern<MockStorage, MockApi, MockQuerier>,
+    ) {
+        let mut deps = mock_dependencies(20, &[]);
+        let env = mock_env("admin", &[]);
+
+        let init_msg = InitMsg {
+            admin: None,
+            ohm : Contract{address:HumanAddr("ohm".to_string()),code_hash:"Complicated_hash".to_string()},
+            sohm : Contract{address:HumanAddr("sohm".to_string()),code_hash:"Complicated_hash".to_string()},
+            epoch_length: 2200,
+            first_epoch_number: 338,
+            first_epoch_block: 8961000,
+            prng_seed: Binary::from("lolz fun yay".as_bytes()),
+            
+        };
+
+        (init(&mut deps, env, init_msg), deps)
+    }
+
+    fn extract_error_msg<T: Any>(error: StdResult<T>) -> String {
+        match error {
+            Err(err) => match err {
+                StdError::GenericErr { msg, .. } => msg,
+                _ => panic!("Unexpected result from init"),
+            },
+            Ok(_) => "Very nice".to_string()
+        }
+    }
+
+    fn ensure_success(handle_result: HandleResponse) -> bool {
+        let handle_result: HandleAnswer = from_binary(&handle_result.data.unwrap()).unwrap();
+
+        match handle_result {
+        | HandleAnswer::RegisterReceive { status }
+        | HandleAnswer::ChangeAdmin { status }
+        | HandleAnswer::SetContractStatus { status }
+        | HandleAnswer::RevokePermit { status }
+        | HandleAnswer::Rebase { status }
+        | HandleAnswer::Claim { status }
+        | HandleAnswer::Forfeit { status }
+        | HandleAnswer::ToggleDepositLock { status }
+        | HandleAnswer::GiveLockBonus { status }
+        | HandleAnswer::SetContract { status }
+        | HandleAnswer::SetWarmupPeriod { status } => {
+                matches!(status, ResponseStatus::Success { .. })
+            },
+            _ => panic!("Answer not handled in test right now")
+        }
+    }
+
+    fn ensure_failure(handle_result: HandleResponse) -> bool {
+        let handle_result: HandleAnswer = from_binary(&handle_result.data.unwrap()).unwrap();
+
+        match handle_result {
+            | HandleAnswer::RegisterReceive { status }
+            | HandleAnswer::ChangeAdmin { status }
+            | HandleAnswer::SetContractStatus { status }
+            | HandleAnswer::RevokePermit { status }
+            | HandleAnswer::Rebase { status }
+            | HandleAnswer::Claim { status }
+            | HandleAnswer::Forfeit { status }
+            | HandleAnswer::ToggleDepositLock { status }
+            | HandleAnswer::GiveLockBonus { status }
+            | HandleAnswer::SetContract { status }
+            | HandleAnswer::SetWarmupPeriod { status } => {
+                matches!(status, ResponseStatus::Failure { .. })
+            },
+            _ => panic!("Answer not handled in test right now")
+        }
+    }
+
+    // Init tests
+
+    #[test]
+    fn test_init_sanity() {
+        let (_init_result, deps) = init_helper();
+        //assert_eq!(init_result.unwrap(), InitResponse::default());
+
+        let config = ReadonlyConfig::from_storage(&deps.storage);
+        let constants = config.constants().unwrap();
+        
+       
+        assert_eq!(constants.epoch.end_block,8961000);
+        assert_eq!(constants.admin, HumanAddr("admin".to_string()));
+        assert_eq!(
+            constants.prng_seed,
+            sha_256("lolz fun yay".to_owned().as_bytes())
+        );
+    }
+
+
+
+    #[test]
+    fn test_stake(){
+        let (init_result, mut deps) = init_helper();
+        assert!(
+            init_result.is_ok(),
+            "Init failed: {}",
+            init_result.err().unwrap()
+        );
+        let stake_msg = ReceiveMsg::Stake{
+            recipient: None,
+        };
+        let handle_receive_msg = HandleMsg::Receive {
+            sender : HumanAddr("ohm".to_string()),
+            from : HumanAddr("admin".to_string()),
+            amount: Uint128(40000000000000),
+            msg: to_binary(&stake_msg).unwrap()
+        };
+        /*
+        let handle_result = handle(&mut deps, mock_env("ohm", &[]), handle_receive_msg);
+        let result = handle_result.unwrap();
+        assert!(ensure_success(result));
+        */
+        
+    }
 }
 
-fn is_valid_symbol(symbol: &str) -> bool {
-    let len = symbol.len();
-    let len_is_valid = (3..=6).contains(&len);
 
-    len_is_valid && symbol.bytes().all(|byte| (b'A'..=b'Z').contains(&byte))
-}

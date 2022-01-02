@@ -437,6 +437,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71d301d4193d031abdd79ff7e3dd721168a9572ef3fe51a1517aba235bd8f86e"
 
 [[package]]
+name = "s-ohm"
+version = "0.1.0"
+dependencies = [
+ "base64 0.12.3",
+ "bincode2",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "primitive-types",
+ "rand_chacha",
+ "rand_core",
+ "schemars",
+ "secret-toolkit",
+ "serde",
+ "sha2 0.9.8",
+ "snafu",
+ "subtle 2.4.1",
+]
+
+[[package]]
 name = "schemars"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -686,26 +706,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "snip20-reference-impl"
-version = "0.1.0"
-dependencies = [
- "base64 0.12.3",
- "bincode2",
- "cosmwasm-schema",
- "cosmwasm-std",
- "cosmwasm-storage",
- "primitive-types",
- "rand_chacha",
- "rand_core",
- "schemars",
- "secret-toolkit",
- "serde",
- "sha2 0.9.8",
- "snafu",
- "subtle 2.4.1",
 ]
 
 [[package]]

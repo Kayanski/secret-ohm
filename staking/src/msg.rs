@@ -4,7 +4,6 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::batch;
-use crate::transaction_history::{RichTx, Tx};
 use crate::viewing_key::ViewingKey;
 use cosmwasm_std::{Binary, HumanAddr, StdError, StdResult, Uint128};
 use secret_toolkit::permit::Permit;
@@ -97,6 +96,7 @@ pub enum ReceiveMsg {
 pub enum HandleMsg {
     //Receive tokens (need for a register receive at the initialization)
     Receive{
+        sender : HumanAddr,
         from: HumanAddr,
         amount: Uint128,
         msg: Binary,
@@ -505,14 +505,6 @@ pub enum QueryAnswer {
     Balance {
         amount: Uint128,
     },
-    TransferHistory {
-        txs: Vec<Tx>,
-        total: Option<u64>,
-    },
-    TransactionHistory {
-        txs: Vec<RichTx>,
-        total: Option<u64>,
-    },
     ViewingKeyError {
         msg: String,
     },
@@ -584,7 +576,7 @@ pub fn space_pad(block_size: usize, message: &mut Vec<u8>) -> &mut Vec<u8> {
 pub enum SOhmHandleMsg{
     Rebase
     {
-        profit: u128,
+        profit: Uint128,
         epoch: u64,
     },
 }
@@ -636,23 +628,40 @@ impl Query for SOhmQueryMsg {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct CirculatingSupplyResponse{
+pub struct CirculatingSupply{
     pub circulating_supply: Uint128,
 }
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct GonsForBalanceResponse{
-    pub gons: String,
+pub struct CirculatingSupplyResponse{
+    pub circulating_supply: CirculatingSupply,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct BalanceForGonsResponse{
+pub struct GonsForBalance{
+    pub gons: String,
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct GonsForBalanceResponse{
+    pub gons_for_balance: GonsForBalance,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct BalanceForGons{
     pub amount: Uint128,
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct BalanceForGonsResponse{
+    pub balance_for_gons: BalanceForGons,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Index{
+    pub index: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct IndexResponse{
-    pub index: String,
+    pub index: Index,
 }
     
 

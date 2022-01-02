@@ -8,7 +8,7 @@ use crate::viewing_key::ViewingKey;
 use cosmwasm_std::{Binary, HumanAddr, StdError, StdResult, Uint128};
 use secret_toolkit::permit::Permit;
 
-use secret_toolkit::utils::{HandleCallback, Query};
+use secret_toolkit::utils::{HandleCallback};
 
 /// We make sure that responses from `handle` are padded to a multiple of this size.
 pub const RESPONSE_BLOCK_SIZE: usize = 256;
@@ -185,33 +185,6 @@ pub enum TreasuryHandleMsg{
 impl HandleCallback for TreasuryHandleMsg{
     const BLOCK_SIZE: usize = RESPONSE_BLOCK_SIZE;
 }
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum OhmQueryMsg{
-    GetTotalSupply{
-
-    },
-}
-
-impl Query for OhmQueryMsg {
-    const BLOCK_SIZE: usize = RESPONSE_BLOCK_SIZE;
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct TotalSupplyResponse{
-    pub total_supply: Uint128,
-}
-
-   
-
-
-
-
-
-
-
-
 
 pub fn status_level_to_u8(status_level: ContractStatusLevel) -> u8 {
     match status_level {

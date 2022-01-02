@@ -1,7 +1,7 @@
 use std::any::type_name;
 use std::convert::TryFrom;
 
-use cosmwasm_std::{CanonicalAddr, HumanAddr, ReadonlyStorage, StdError, StdResult, Storage};
+use cosmwasm_std::{CanonicalAddr, HumanAddr, ReadonlyStorage, StdError, StdResult, Storage, Uint128};
 use cosmwasm_storage::{PrefixedStorage, ReadonlyPrefixedStorage, bucket, bucket_read};
 
 use secret_toolkit::storage::{TypedStore, TypedStoreMut};
@@ -23,7 +23,7 @@ pub const KEY_CONSTANTS: &[u8] = b"constants";
 pub const KEY_CONTRACTS: &[u8] = b"contracts";
 pub const KEY_TOTAL_SUPPLY: &[u8] = b"total_supply";
 pub const KEY_CONTRACT_STATUS: &[u8] = b"contract_status";
-pub const KEY_WARMUP_INFO: &[u8] = b"minters";
+pub const KEY_WARMUP_INFO: &[u8] = b"warmup_info";
 pub const KEY_TX_COUNT: &[u8] = b"tx-count";
 
 pub const PREFIX_CONFIG: &[u8] = b"config";
@@ -41,7 +41,7 @@ pub struct Constants {
     pub ohm : Contract,
     pub sohm : Contract,
     pub epoch: Epoch,
-    pub total_bonus: u128,
+    pub total_bonus: Uint128,
     pub warmup_period: u64,
     // the address of this contract, used to validate query permits
     pub contract_address: HumanAddr,
@@ -93,12 +93,12 @@ pub struct Epoch{
     pub length: u64,
     pub number: u64,
     pub end_block: u64,
-    pub distribute: u128,
+    pub distribute: Uint128,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct Claim {
-    pub deposit: u128,
+    pub deposit: Uint128,
     pub gons: String,
     pub expiry: u64,
     pub lock: bool, // prevents malicious delays
@@ -107,7 +107,7 @@ pub struct Claim {
 impl Default for Claim{
     fn default() -> Self{
         Self{
-            deposit:0,
+            deposit:Uint128(0),
             gons:U256::to_string(&U256::zero()),
             expiry:0,
             lock:false
@@ -293,7 +293,7 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
     }
 
     fn warmup_info(&self, address: &CanonicalAddr) -> Claim {
-        bucket_read(KEY_WARMUP_INFO, self.0).load(address.as_slice()).unwrap()
+        bucket_read(KEY_WARMUP_INFO, self.0).load(address.as_slice()).unwrap_or_default()
     }
 
     pub fn tx_count(&self) -> u64 {
@@ -370,7 +370,7 @@ impl<'a, S: ReadonlyStorage> ReadonlyBalancesImpl<'a, S> {
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Default, JsonSchema)]
 pub struct Allowance {
-    pub amount: u128,
+    pub amount: Uint128,
     pub expiration: Option<u64>,
 }
 

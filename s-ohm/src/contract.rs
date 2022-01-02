@@ -25,7 +25,7 @@ use crate::transaction_history::{
     get_transfers, get_txs, store_mint, store_transfer,
 };
 use crate::rebase_history::{
-    store_rebase
+    store_rebase, get_rebases
 };
 use crate::viewing_key::{ViewingKey, VIEWING_KEY_SIZE};
 use secret_toolkit::permit::{validate, Permission, Permit, RevokedPermits};
@@ -358,6 +358,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryM
         QueryMsg::ExchangeRate {} => query_exchange_rate(&deps.storage),
 
         QueryMsg::CirculatingSupply {} => query_circulating_supply(deps),
+        QueryMsg::RebaseHistory {page, page_size} => query_rebases(deps, page.unwrap_or(0), page_size),
 
         QueryMsg::WithPermit { permit, query } => permit_queries(deps, permit, query),
         _ => viewing_keys_queries(deps, msg),
@@ -531,6 +532,20 @@ fn query_contract_status<S: ReadonlyStorage>(storage: &S) -> QueryResult {
     to_binary(&QueryAnswer::ContractStatus {
         status: config.contract_status(),
     })
+}
+
+pub fn query_rebases<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    page: u32,
+    page_size: u32,
+) -> StdResult<Binary> {
+    let (rebases, total) = get_rebases(&deps.storage, page, page_size)?;
+
+    let result = QueryAnswer::RebaseHistory {
+        rebases,
+        total: Some(total),
+    };
+    to_binary(&result)
 }
 
 pub fn query_transfers<S: Storage, A: Api, Q: Querier>(

@@ -1,7 +1,7 @@
 use std::any::type_name;
 use std::convert::TryFrom;
 
-use cosmwasm_std::{CanonicalAddr, HumanAddr, ReadonlyStorage, StdError, StdResult, Storage};
+use cosmwasm_std::{CanonicalAddr, HumanAddr, ReadonlyStorage, StdError, StdResult, Storage, Uint128};
 use cosmwasm_storage::{PrefixedStorage, ReadonlyPrefixedStorage, bucket, bucket_read};
 
 use schemars::JsonSchema;
@@ -50,31 +50,31 @@ pub struct Constants {
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Terms {
-        pub control_variable: u128, // scaling variable for price
-        pub vesting_term: u64, // in blocks
-        pub minimum_price: u128, // vs principle value
-        pub max_payout: u128 ,// in thousandths of a %. i.e. 500 = 0.5%
-        pub fee: u128, // as % of bond payout, in hundreths. ( 500 = 5% = 0.05 for every 1 paid)
-        pub max_debt: u128, // 9 decimal debt ratio, max % total supply created as debt
-    }
+    pub control_variable: Uint128, // scaling variable for price
+    pub vesting_term: u64, // in blocks
+    pub minimum_price: Uint128, // vs principle value
+    pub max_payout: Uint128 ,// in thousandths of a %. i.e. 500 = 0.5%
+    pub fee: Uint128, // as % of bond payout, in hundreths. ( 500 = 5% = 0.05 for every 1 paid)
+    pub max_debt: Uint128, // 9 decimal debt ratio, max % total supply created as debt
+}
 
 // Info for bond holder
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Bond{
-    pub payout: u128, // OHM remaining to be paid
+    pub payout: Uint128, // OHM remaining to be paid
     pub vesting: u64, // Blocks left to vest
     pub last_block: u64, // Last interaction
-    pub price_paid: u128, // In DAI, for front end viewing
+    pub price_paid: Uint128, // In DAI, for front end viewing
 }
 
 impl Default for Bond{
     fn default() -> Self{
         Bond{
-            payout: 0,
+            payout: Uint128(0),
             vesting: 0,
             last_block: 0,
-            price_paid: 0
+            price_paid: Uint128(0)
         }
     }
 }
@@ -83,8 +83,8 @@ impl Default for Bond{
 #[serde(rename_all = "snake_case")]
 pub struct Adjust {
     pub add: bool, // addition or subtraction
-    pub rate: u128, // increment
-    pub target: u128, // BCV when adjustment finished
+    pub rate: Uint128, // increment
+    pub target: Uint128, // BCV when adjustment finished
     pub buffer: u64, // minimum length (in blocks) between adjustments
     pub last_block: u64, // block when last adjustment made
 }
@@ -92,7 +92,7 @@ pub struct Adjust {
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Info{
-    pub rate: u128, // in ten-thousandths ( 5000 = 0.5% )
+    pub rate: Uint128, // in ten-thousandths ( 5000 = 0.5% )
     pub recipient: HumanAddr
 }
 

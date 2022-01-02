@@ -80,11 +80,11 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfig<'a, S> {
         self.as_readonly().rate_info()
     }
 
-    pub fn info_by_recipient(&self, recipient: HumanAddr) -> Info {
+    pub fn info_by_recipient(&self, recipient: HumanAddr) -> StdResult<Info> {
         self.as_readonly().info_by_recipient(recipient)
     }
 
-    pub fn adjustment(&self, index: usize) -> Adjust {
+    pub fn adjustment(&self, index: usize) -> StdResult<Adjust> {
         self.as_readonly().adjustment(index)
     }
 }
@@ -140,7 +140,7 @@ impl<'a, S: Storage> Config<'a, S> {
         self.as_readonly().rate_info()
     }
 
-    pub fn info_by_recipient(&self, recipient: HumanAddr) -> Info {
+    pub fn info_by_recipient(&self, recipient: HumanAddr) -> StdResult<Info> {
         self.as_readonly().info_by_recipient(recipient)
     }
 
@@ -167,7 +167,7 @@ impl<'a, S: Storage> Config<'a, S> {
         bucket(KEY_ADJUSTMENTS, &mut self.storage).save(&index.to_be_bytes(),&adjust)
     }
 
-    pub fn adjustment(&self, index: usize) -> Adjust {
+    pub fn adjustment(&self, index: usize) -> StdResult<Adjust> {
         self.as_readonly().adjustment(index)
     }
 
@@ -191,19 +191,21 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
     }
 
     fn rate_info(&self) -> Vec<Info> {
-        get_bin_data(self.0, KEY_INFO).unwrap()
+        get_bin_data(self.0, KEY_INFO).unwrap_or_default()
     }
 
-    pub fn info_by_recipient(&self, recipient: HumanAddr) -> Info {
+    pub fn info_by_recipient(&self, recipient: HumanAddr) -> StdResult<Info> {
         let recipient_info: Vec<Info> = self.rate_info()
         .into_iter()
         .filter(|voc| voc.recipient == recipient.clone())
         .collect();
-        recipient_info.get(0).unwrap().clone()
+        recipient_info.get(0).clone().ok_or_else(||{
+            StdError::generic_err("No reward rate for this recipient")
+        }).map(|x|{x.clone()})
     }
 
-    fn adjustment(&self, index: usize) -> Adjust {
-        bucket_read(KEY_ADJUSTMENTS, self.0).load(&index.to_be_bytes()).unwrap()
+    fn adjustment(&self, index: usize) -> StdResult<Adjust> {
+        bucket_read(KEY_ADJUSTMENTS, self.0).load(&index.to_be_bytes())
     }
 }
 

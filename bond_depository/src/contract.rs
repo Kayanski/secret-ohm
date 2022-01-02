@@ -11,8 +11,8 @@ use crate::msg::QueryWithPermit;
 use crate::msg::{
     space_pad, HandleAnswer, HandleMsg, InitMsg, QueryAnswer, QueryMsg, ReceiveMsg,
     ResponseStatus::Success, TreasuryHandleMsg, StakingHandleMsg,
-    OhmQueryMsg, TreasuryQueryMsg, BondCalculatorQueryMsg,
-    TotalSupplyResponse, ValueOfResponse, MarkdownResponse,
+    TreasuryQueryMsg, BondCalculatorQueryMsg,
+    ValueOfResponse, MarkdownResponse,
     BondParameter,
     RESPONSE_BLOCK_SIZE
 };
@@ -143,12 +143,12 @@ pub fn initialize_bond_terms<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("Bonds must be initialized from 0"));
     }
     consts.terms = Some(Terms{
-        control_variable,
+        control_variable:Uint128(control_variable),
         vesting_term,
-        minimum_price,
-        max_payout,
-        fee,
-        max_debt
+        minimum_price: Uint128(minimum_price),
+        max_payout:Uint128(max_payout),
+        fee:Uint128(fee),
+        max_debt:Uint128(max_debt),
     });
     config.set_total_debt(initial_debt);
     config.set_last_decay(env.block.height);
@@ -181,16 +181,16 @@ pub fn set_bond_terms<S: Storage, A: Api, Q: Querier>(
             if input > 1000 {
                 return Err(StdError::generic_err("Vesting must be longer than 36 hours" ));
             }
-            terms.max_payout = input;
+            terms.max_payout = Uint128(input);
         },
         BondParameter::Fee => {
             if input > 10000 {
                 return Err(StdError::generic_err("Vesting must be longer than 36 hours" ));
             }
-            terms.fee = input;
+            terms.fee = Uint128(input);
         },
         BondParameter::Debt => {
-            terms.max_debt = input;
+            terms.max_debt = Uint128(input);
             
         },
     }
@@ -215,13 +215,13 @@ pub fn set_adjustment<S: Storage, A: Api, Q: Querier>(
     let mut config = Config::from_storage(&mut deps.storage);
     check_if_admin(&config,&env.message.sender)?;
     let mut consts = config.constants()?;
-    if increment > consts.terms.clone().unwrap().control_variable*25/1000{
+    if increment > consts.terms.clone().unwrap().control_variable.u128()*25/1000{
         return Err(StdError::generic_err("Increment too large"));
     }
     consts.adjustment = Some(Adjust{
         add: addition,
-        rate: increment,
-        target: target,
+        rate: Uint128(increment),
+        target: Uint128(target),
         buffer: buffer,
         last_block: env.block.height,
     });
@@ -269,7 +269,7 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
     if token != consts.principle.address{
         return Err(StdError::generic_err(format!("This bond is only for the token: {}",token)));
     }
-    if config.total_debt() > terms.max_debt{
+    if config.total_debt() > terms.max_debt.u128(){
         return Err(StdError::generic_err("Max capacity reached"));
     }
     let prince_in_usd = bond_price_in_usd(deps,env.block.height)?;
@@ -285,7 +285,7 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
         consts.treasury.code_hash.clone(),
         consts.treasury.address.clone(),
     ).unwrap();
-    let value = value_of_response.value.u128();
+    let value = value_of_response.value_of.value.u128();
 
     let payout = payout_for(deps,env.block.height,value)?;
 
@@ -298,7 +298,7 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
     }
 
     // profits are calculated
-    let fee = payout.checked_mul( terms.fee ).ok_or_else(||{
+    let fee = payout.checked_mul( terms.fee.u128() ).ok_or_else(||{
         StdError::generic_err("The fee is too high, sorry, check your privilege")
     })?/10_000;
 
@@ -319,7 +319,7 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
             Uint128(amount),
             Some(to_binary(
                 &TreasuryHandleMsg::Deposit{
-                    profit
+                    profit:Uint128(profit)
                 }
             )?),
             None,
@@ -350,13 +350,13 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
     let canon_depositor = deps.api.canonical_address(&depositor)?;
     let mut bonds = BondInfo::from_storage(&mut deps.storage);
     bonds.set_bond(&canon_depositor,Bond{
-        payout : bonds.bond(&canon_depositor).payout
+        payout : Uint128(bonds.bond(&canon_depositor).payout.u128()
         .checked_add(value).ok_or_else(||{
             StdError::generic_err("Too much bond debt")
-        })?, 
+        })?), 
         vesting: terms.vesting_term,
         last_block: block_height,
-        price_paid: prince_in_usd
+        price_paid: Uint128(prince_in_usd)
     })?; 
         
     adjust(deps,env)?; // control variable is adjusted
@@ -364,7 +364,7 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::Deposit{ status: Success, payout: payout })?),
+        data: Some(to_binary(&HandleAnswer::Deposit{ status: Success, payout: Uint128(payout) })?),
     })
 }
 
@@ -386,18 +386,18 @@ pub fn redeem<S: Storage, A: Api, Q: Querier>(
     if  percent_vested >= 10_000  { // if fully vested
         payout = info.payout;
         bond_to_set = Bond::default();
-        stake_or_send_return = stake_or_send(deps, recipient, stake, info.payout ); // pay user everything due
+        stake_or_send_return = stake_or_send(deps, recipient, stake, info.payout.u128() ); // pay user everything due
         messages.extend(stake_or_send_return?.messages);
     } else { // if unfinished
         // calculate payout vested
-        payout = info.payout *  percent_vested / 10_000;
+        payout = Uint128(info.payout.u128() *  percent_vested / 10_000);
         bond_to_set = Bond{
-            payout: info.payout - payout,
+            payout: (info.payout - payout)?,
             vesting: info.vesting - (block_height - info.last_block),
             last_block: block_height,
             price_paid: info.price_paid
         };
-        stake_or_send_return = stake_or_send(deps,recipient, stake, payout );
+        stake_or_send_return = stake_or_send(deps,recipient, stake, payout.u128() );
         messages.extend(stake_or_send_return?.messages);
     }
     //Update user info
@@ -460,16 +460,16 @@ pub fn adjust<S: Storage, A: Api, Q: Querier>(
     let mut terms = consts.terms.unwrap();
 
     let block_can_adjust = adjustment.last_block + adjustment.buffer;
-    if adjustment.rate != 0 && env.block.height >= block_can_adjust{
+    if adjustment.rate.u128() != 0 && env.block.height >= block_can_adjust{
         if  adjustment.add {
             terms.control_variable = terms.control_variable + adjustment.rate;
             if terms.control_variable >= adjustment.target {
-                adjustment.rate = 0;
+                adjustment.rate = Uint128(0);
             }
         } else {
-            terms.control_variable = terms.control_variable - adjustment.rate;
+            terms.control_variable = (terms.control_variable - adjustment.rate)?;
             if terms.control_variable <= adjustment.target {
-                adjustment.rate = 0;
+                adjustment.rate = Uint128(0);
             }
         }
         adjustment.last_block = env.block.height;
@@ -499,14 +499,8 @@ pub fn max_payout<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
 ) -> StdResult<u128> {
     let consts = ReadonlyConfig::from_storage(&deps.storage).constants()?;
-    let total_supply_query_msg = OhmQueryMsg::GetTotalSupply{};
-    let total_supply_response: TotalSupplyResponse = total_supply_query_msg.query(
-        &deps.querier,
-        consts.ohm.code_hash.clone(),
-        consts.ohm.address.clone(),
-    )?;
-    total_supply_response.total_supply.u128()
-    .checked_mul(consts.terms.unwrap().max_payout)
+    ohm_total_supply(&deps.querier,&consts.ohm)?
+    .checked_mul(consts.terms.unwrap().max_payout.u128())
     .ok_or_else(||{
             StdError::generic_err("too much payout")
         }
@@ -559,7 +553,7 @@ pub fn bond_price<S: Storage, A: Api, Q: Querier>(
     block_height: u64
 ) -> StdResult<u128> {
     let terms = ReadonlyConfig::from_storage(&deps.storage).constants()?.terms.unwrap();
-    let mut price = terms.control_variable
+    let mut price = terms.control_variable.u128()
     .checked_mul(debt_ratio(deps, block_height)?)
     .ok_or_else(||{
             StdError::generic_err("too much payout")
@@ -575,8 +569,8 @@ pub fn bond_price<S: Storage, A: Api, Q: Querier>(
             StdError::generic_err("Unaccessible Error")
         }
     )?;
-    if price < terms.minimum_price{
-        price = terms.minimum_price
+    if price < terms.minimum_price.u128(){
+        price = terms.minimum_price.u128()
     }
     Ok(price)
 }
@@ -600,7 +594,7 @@ fn query_bond_price<S: Storage, A: Api, Q: Querier>(
     let config = ReadonlyConfig::from_storage(&deps.storage);
     let mut consts = config.constants()?;
     let mut terms = consts.terms.unwrap();
-    let mut price = terms.control_variable
+    let mut price = terms.control_variable.u128()
     .checked_mul(debt_ratio(deps, env.block.height)?)
     .ok_or_else(||{
             StdError::generic_err("too much payout")
@@ -616,10 +610,10 @@ fn query_bond_price<S: Storage, A: Api, Q: Querier>(
             StdError::generic_err("Unaccessible Error")
         }
     )?;
-    if price < terms.minimum_price{
-        price = terms.minimum_price
-    }else if terms.minimum_price != 0{
-        terms.minimum_price = 0;
+    if price < terms.minimum_price.u128(){
+        price = terms.minimum_price.u128()
+    }else if terms.minimum_price.u128() != 0{
+        terms.minimum_price = Uint128(0);
     }
 
     let mut config = Config::from_storage(&mut deps.storage);
@@ -646,7 +640,7 @@ pub fn bond_price_in_usd<S: Storage, A: Api, Q: Querier>(
         )?;
 
         price = bond_price(deps,block_height)?
-        .checked_mul(markdown_response.price.u128())
+        .checked_mul(markdown_response.markdown.price.u128())
         .ok_or_else(||{
                 StdError::generic_err("BondPrice too high")
             }
@@ -737,7 +731,7 @@ pub fn standardized_debt_ratio<S: Storage, A: Api, Q: Querier>(
         )?;
 
         ratio = debt_ratio(deps, block_height)?
-        .checked_mul(markdown_response.price.u128())
+        .checked_mul(markdown_response.markdown.price.u128())
         .ok_or_else(||{
                 StdError::generic_err("ratio too high")
             }
@@ -870,10 +864,10 @@ pub fn query_pending_payout_for<S: Storage, A: Api, Q: Querier>(
     if percent_vested >= 10000{
         pending_payout = payout;
     } else {
-        pending_payout = payout * percent_vested / 10_000 ;
+        pending_payout = Uint128(payout.u128() * percent_vested / 10_000);
     }
     to_binary(&QueryAnswer::PendingPayoutFor {
-        payout: Uint128(pending_payout),
+        payout: pending_payout,
     })
 }
 
@@ -932,13 +926,14 @@ fn ohm_total_supply<Q: Querier>(
     querier: &Q,
     ohm: &Contract, 
     ) -> StdResult<u128>{
-    let total_supply_query_msg = OhmQueryMsg::GetTotalSupply{};
-    let total_supply_response: TotalSupplyResponse = total_supply_query_msg.query(
+
+    let token_info = snip20::token_info_query(
         querier,
+        RESPONSE_BLOCK_SIZE,
         ohm.code_hash.clone(),
         ohm.address.clone(),
     )?;
-    Ok(total_supply_response.total_supply.u128())
+    Ok(token_info.total_supply.unwrap_or_default().u128())
 }
 
 fn permit_queries<S: Storage, A: Api, Q: Querier>(
@@ -1041,7 +1036,7 @@ fn query_contract_info<S: ReadonlyStorage>(storage: &S) -> QueryResult {
         adjustment: constants.adjustment,
 
         admin: constants.admin,
-        total_debt: config.total_debt(),
+        total_debt: Uint128(config.total_debt()),
         last_decay: config.last_decay(),
     })
 }
@@ -1054,10 +1049,10 @@ fn query_bond_info<S: Storage, A: Api, Q: Querier>(
     let bond = ReadonlyBondInfo::from_storage(&deps.storage).bond(&canon_recipient);
 
     to_binary(&QueryAnswer::Bond {
-        payout: Uint128(bond.payout), 
+        payout: bond.payout, 
         vesting: bond.vesting,
         last_block: bond.last_block,
-        price_paid: Uint128(bond.price_paid),
+        price_paid: bond.price_paid,
     })
 }
 

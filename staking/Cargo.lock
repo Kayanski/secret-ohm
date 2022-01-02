@@ -689,7 +689,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "snip20-reference-impl"
+name = "staking"
 version = "0.1.0"
 dependencies = [
  "base64 0.12.3",

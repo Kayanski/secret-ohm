@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{
-    Api, ReadonlyStorage, StdResult, Storage,
+   ReadonlyStorage, StdResult, Storage,
 };
 use cosmwasm_storage::{PrefixedStorage, ReadonlyPrefixedStorage};
 
@@ -68,7 +68,7 @@ fn append_rebase<S: Storage>(
     store.push(rebase)
 }
 
-pub fn get_rebases<A: Api, S: ReadonlyStorage>(
+pub fn get_rebases<S: ReadonlyStorage>(
     storage: &S,
     page: u32,
     page_size: u32,
