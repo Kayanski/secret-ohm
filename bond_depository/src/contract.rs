@@ -55,7 +55,20 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         contract_address: env.contract.address,
     })?;
 
-    Ok(InitResponse::default())
+    let messages = vec![
+        snip20::register_receive_msg(
+            env.contract_code_hash.clone(),
+            None,
+            RESPONSE_BLOCK_SIZE,
+            msg.principle.code_hash.clone(),
+            msg.principle.address.clone(),
+        )?
+    ];
+
+    Ok(InitResponse {
+        messages,
+        log: vec![],
+    })
 }
 
 
@@ -115,6 +128,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryM
         _ => viewing_keys_queries(deps, msg),
     }
 }
+
 fn pad_response(response: StdResult<HandleResponse>) -> StdResult<HandleResponse> {
     response.map(|mut response| {
         response.data = response.data.map(|mut data| {
@@ -150,6 +164,8 @@ pub fn initialize_bond_terms<S: Storage, A: Api, Q: Querier>(
         fee:Uint128(fee),
         max_debt:Uint128(max_debt),
     });
+    config.set_constants(&consts)?;
+
     config.set_total_debt(initial_debt);
     config.set_last_decay(env.block.height);
     Ok(HandleResponse {
@@ -264,7 +280,9 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
     decay_debt(deps,env.block.height)?;
     let config = ReadonlyConfig::from_storage(&deps.storage);
     let consts = config.constants()?;
-    let terms = consts.terms.unwrap();
+    let terms = consts.terms.ok_or_else(||{
+        StdError::generic_err("The bond terms were not initialized")
+    })?;
     let block_height = env.block.height;
     if token != consts.principle.address{
         return Err(StdError::generic_err(format!("This bond is only for the token: {}",token)));
@@ -272,7 +290,7 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
     if config.total_debt() > terms.max_debt.u128(){
         return Err(StdError::generic_err("Max capacity reached"));
     }
-    let prince_in_usd = bond_price_in_usd(deps,env.block.height)?;
+    let price_in_usd = bond_price_in_usd(deps,env.block.height)?;
     let native_price = _bond_price(deps,&env)?;
 
     if max_price < native_price{
@@ -329,7 +347,7 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
         )?
     );
 
-    if  fee != 0  { // fee is transferred to dao 
+    if fee != 0  { // fee is transferred to dao 
         messages.push(snip20::transfer_msg(
             consts.dao,
             Uint128(fee),
@@ -356,7 +374,7 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
         })?), 
         vesting: terms.vesting_term,
         last_block: block_height,
-        price_paid: Uint128(prince_in_usd)
+        price_paid: Uint128(price_in_usd)
     })?; 
         
     adjust(deps,env)?; // control variable is adjusted
@@ -456,28 +474,30 @@ pub fn adjust<S: Storage, A: Api, Q: Querier>(
     env: Env,
 ) -> StdResult<()> {
     let mut consts = ReadonlyConfig::from_storage(&deps.storage).constants()?;
-    let mut adjustment = consts.adjustment.unwrap();
-    let mut terms = consts.terms.unwrap();
+    if let Some(mut adjustment) = consts.adjustment{
+        let mut terms = consts.terms.unwrap();
+        let block_can_adjust = adjustment.last_block + adjustment.buffer;
 
-    let block_can_adjust = adjustment.last_block + adjustment.buffer;
-    if adjustment.rate.u128() != 0 && env.block.height >= block_can_adjust{
-        if  adjustment.add {
-            terms.control_variable = terms.control_variable + adjustment.rate;
-            if terms.control_variable >= adjustment.target {
-                adjustment.rate = Uint128(0);
+        if adjustment.rate.u128() != 0 && env.block.height >= block_can_adjust{
+            if  adjustment.add {
+                terms.control_variable = terms.control_variable + adjustment.rate;
+                if terms.control_variable >= adjustment.target {
+                    adjustment.rate = Uint128(0);
+                }
+            } else {
+                terms.control_variable = (terms.control_variable - adjustment.rate)?;
+                if terms.control_variable <= adjustment.target {
+                    adjustment.rate = Uint128(0);
+                }
             }
-        } else {
-            terms.control_variable = (terms.control_variable - adjustment.rate)?;
-            if terms.control_variable <= adjustment.target {
-                adjustment.rate = Uint128(0);
-            }
+            adjustment.last_block = env.block.height;
+            consts.terms = Some(terms);
+            consts.adjustment = Some(adjustment);
+            let mut config = Config::from_storage(&mut deps.storage);
+            config.set_constants(&consts)?;
         }
-        adjustment.last_block = env.block.height;
-        consts.terms = Some(terms);
-        consts.adjustment = Some(adjustment);
-        let mut config = Config::from_storage(&mut deps.storage);
-        config.set_constants(&consts)?;
     }
+    
     Ok(())
 }
 pub fn decay_debt<S: Storage, A: Api, Q: Querier>(
@@ -531,7 +551,7 @@ pub fn payout_for<S: Storage, A: Api, Q: Querier>(
             StdError::generic_err("too much payout")
         }
     )?
-    .checked_div(10_u128.pow(16))
+    .checked_mul(100_u128)
     .ok_or_else(||{
             StdError::generic_err("Unaccessible Error")
         }
@@ -695,12 +715,7 @@ pub fn debt_ratio<S: Storage, A: Api, Q: Querier>(
     )?
     .checked_div(supply)
     .ok_or_else(||{
-            StdError::generic_err("BondPrice too high")
-        }
-    )?
-    .checked_div(10_u128.pow(18_u32))
-    .ok_or_else(||{
-            StdError::generic_err("BondPrice too high")
+            StdError::generic_err("Unknown Error determining the debt ratio")
         }
     )
 }
@@ -784,7 +799,12 @@ pub fn debt_decay<S: Storage, A: Api, Q: Querier>(
     block_height: u64
 ) -> StdResult<u128> {
     let config = ReadonlyConfig::from_storage(&deps.storage);
-    let blocks_since_last = block_height - config.last_decay();
+    let blocks_since_last = block_height
+    .checked_sub(config.last_decay())
+    .ok_or_else(||{
+            StdError::generic_err("You can't query the debt decay for a past block !")
+        }
+    )?;
     let total_debt = config.total_debt();
     let mut decay = total_debt
     .checked_mul(blocks_since_last.into())

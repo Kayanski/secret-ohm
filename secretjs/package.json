@@ -15,17 +15,19 @@
     "4:batch_same_tx": "node 4_transactions/send_batch_same_tx.js",
     "4:advanced": "node 4_transactions/send.js",
     "5:multi": "node 5_contracts/main_multiExecute.js",
-    "deploy" : "node deploy_contracts/connect.js",
-    "dev" : "node deploy_contracts/Develop.js",
-    "treasury" : "node deploy_contracts/upload/treasury.js",
-    "s-ohm" : "node deploy_contracts/upload/s-ohm.js",
-    "staking" : "node deploy_contracts/upload/staking.js"
+    "deploy": "node deploy_contracts/connect.js",
+    "dev": "node deploy_contracts/Develop.js",
+    "treasury": "node deploy_contracts/upload/treasury.js",
+    "s-ohm": "node deploy_contracts/upload/s-ohm.js",
+    "staking": "node deploy_contracts/upload/staking.js",
+    "transfer": "node deploy_contracts/transfer.js",
+    "queries": "node OHMInteractions/Query.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "dotenv": "^8.2.0",
-    "secretjs": "^0.11.0",
-    "uuid" : "^8.3.2"
+    "secretjs": "^0.17.5",
+    "uuid": "^8.3.2"
   }
 }

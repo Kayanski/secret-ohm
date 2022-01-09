@@ -1,14 +1,19 @@
 const {
-  EnigmaUtils, Secp256k1Pen, SigningCosmWasmClient, pubkeyToAddress, encodeSecp256k1Pubkey
+  EnigmaUtils, Secp256k1Pen, SigningCosmWasmClient, pubkeyToAddress, encodeSecp256k1Pubkey,makeSignBytes
 } = require("secretjs");
 
 const uuid = require("uuid");
 
 const fs = require("fs");
 
-const { fromUtf8 } = require("@iov/encoding");
 require('dotenv').config();
 
+function jsonToBase64(json){
+  return Buffer.from(JSON.stringify(json)).toString('base64')
+}
+function base64ToJson(base64String){
+  return JSON.parse(Buffer.from(base64String,'base64').toString('utf8'));
+}
 
 //DAO Address
 const DAOAddress = "secretnothing189765"
@@ -17,13 +22,13 @@ const DAOAddress = "secretnothing189765"
 const initialIndex = '7675210820';
 
 // First block epoch occurs
-const firstEpochBlock = 8961000;
+const firstEpochBlock = 500;
 
 // What epoch will be first epoch
 const firstEpochNumber = 338;
 
 // How many blocks are in each epoch
-const epochLengthInBlocks = 2200;
+const epochLengthInBlocks = 10;
 
 // Initial reward rate for epoch
 const initialRewardRate = '3000';
@@ -77,11 +82,12 @@ const customFees = {
   },
 }
 
+async function get_testnet_default_address(){
+  return get_address(process.env.MNEMONIC_TESTNET);
+}
 
-async function get_address(){
-  // Use key created in tutorial #2
-  const mnemonic = process.env.MNEMONIC;
-
+async function get_address(mnemonic = process.env.MNEMONIC){
+  
   // A pen is the most basic tool you can think of for signing.
   // This wraps a single keypair and allows for signing.
   const signingPen = await Secp256k1Pen.fromMnemonic(mnemonic);
@@ -95,11 +101,8 @@ async function get_address(){
   return accAddress;
 }
 
-async function get_client(){
+async function get_client(mnemonic = process.env.MNEMONIC){
   const httpUrl = process.env.SECRET_REST_URL;
-
-  // Use key created in tutorial #2
-  const mnemonic = process.env.MNEMONIC;
 
   // A pen is the most basic tool you can think of for signing.
   // This wraps a single keypair and allows for signing.
@@ -150,13 +153,54 @@ const snip_contract = "../snip20impl/contract.wasm"
 
 const main = async () => {
 
+  // Transfer to the selected address, to always use the same address
+  let client = await get_client(process.env.MNEMONIC_TESTNET);
 
-  process.argv.forEach((val, index) => {
-    console.log(`${index}: ${val}`)
-  })
-  
+
+
+  const signingPen = await Secp256k1Pen.fromMnemonic(process.env.MNEMONIC_TESTNET);
+  const memo = 'My first secret transaction, sending uscrt to my own address';
+
+  const sendMsg = {
+      type: "cosmos-sdk/MsgSend",
+      value: {
+          from_address: await get_testnet_default_address(),
+          to_address: await get_address(),
+          amount: [
+              {
+                  denom: "uscrt",
+                  amount: "100000000000000000",
+              },
+          ],
+      },
+  };
+
+  const fee = {
+      amount: [
+          {
+              amount: "50000",
+              denom: "uscrt",
+          },
+      ],
+      gas: "100000",
+  };
+
+  const chainId = await client.getChainId();
+  const { accountNumber, sequence } = await client.getNonce(await get_testnet_default_address());
+  const signBytes = makeSignBytes([sendMsg], fee, chainId, memo, accountNumber, sequence);
+  const signature = await signingPen.sign(signBytes);
+  const signedTx = {
+      msg: [sendMsg],
+      fee: fee,
+      memo: memo,
+      signatures: [signature],
+  };
+  //const { logs, transactionHash } = await client.postTx(signedTx);
+  //console.log(logs,transactionHash);
+
+
   // Create connection to DataHub Secret Network node
-  const client = await get_client();
+  client = await get_client();
 
   const accAddress = await get_address();
 
@@ -443,7 +487,7 @@ const main = async () => {
   }
   console.log(handleMsg);
   response = await client.execute(treasurycontract.contractAddress,handleMsg);
-  console.log("Response: ", response.transactionHash,"\n", JSON.parse(fromUtf8(response.data)));
+  console.log("Response: ", response.transactionHash,"\n", base64ToJson(response.data));
 
   handleMsg = {
       toggle_queue : {
@@ -454,7 +498,7 @@ const main = async () => {
   }
   console.log(handleMsg);
   response = await client.execute(treasurycontract.contractAddress,handleMsg);
-  console.log("Response: ", response.transactionHash,"\n", JSON.parse(fromUtf8(response.data)));
+  console.log("Response: ", response.transactionHash,"\n", base64ToJson(response.data));
 
   handleMsg = {
       queue : {
@@ -464,7 +508,7 @@ const main = async () => {
   }
   console.log(handleMsg);
   response = await client.execute(treasurycontract.contractAddress,handleMsg);
-  console.log("Response: ", response.transactionHash,"\n", JSON.parse(fromUtf8(response.data)));
+  console.log("Response: ", response.transactionHash,"\n", base64ToJson(response.data));
 
   handleMsg = {
       toggle_queue : {
@@ -475,7 +519,7 @@ const main = async () => {
   }
   console.log(handleMsg);
   response = await client.execute(treasurycontract.contractAddress,handleMsg);
-  console.log("Response: ", response.transactionHash,"\n", JSON.parse(fromUtf8(response.data)));
+  console.log("Response: ", response.transactionHash,"\n", base64ToJson(response.data));
 
   //We set the bond terms
   handleMsg = {
@@ -490,7 +534,7 @@ const main = async () => {
       }
     }
     response = await client.execute(sUSTBondContract.contractAddress,handleMsg);
-    console.log("Response: ", response.transactionHash,"\n", JSON.parse(fromUtf8(response.data)));
+    console.log("Response: ", response.transactionHash,"\n", base64ToJson(response.data));
 
      handleMsg = {
         initialize_bond_terms : {
@@ -504,7 +548,7 @@ const main = async () => {
       }
     }
     response = await client.execute(sSCRTBondContract.contractAddress,handleMsg);
-    console.log("Response: ", response.transactionHash,"\n", JSON.parse(fromUtf8(response.data)));
+    console.log("Response: ", response.transactionHash,"\n", base64ToJson(response.data));
 
   // Set staking for sUST and sSCRT bonds
   handleMsg = {
@@ -513,7 +557,7 @@ const main = async () => {
     }
   }
   response = await client.execute(sUSTBondContract.contractAddress,handleMsg);
-  console.log("Response: ", response.transactionHash,"\n", JSON.parse(fromUtf8(response.data)));
+  console.log("Response: ", response.transactionHash,"\n", base64ToJson(response.data));
 
   handleMsg = {
       set_staking : {
@@ -521,7 +565,7 @@ const main = async () => {
     }
   }
   response = await client.execute(sSCRTBondContract.contractAddress,handleMsg);
-  console.log("Response: ", response.transactionHash,"\n", JSON.parse(fromUtf8(response.data)));
+  console.log("Response: ", response.transactionHash,"\n", base64ToJson(response.data));
 
    // Initialize sOHM
 
@@ -531,7 +575,7 @@ const main = async () => {
     }
   }
   response = await client.execute(sOHMcontract.contractAddress,handleMsg);
-  console.log("Response: ", response.transactionHash,"\n", JSON.parse(fromUtf8(response.data)));
+  console.log("Response: ", response.transactionHash,"\n", base64ToJson(response.data));
 
 // set distributor contract and warmup contract
     handleMsg = {
@@ -541,7 +585,7 @@ const main = async () => {
     }
   }
   response = await client.execute(Stakingcontract.contractAddress,handleMsg);
-  console.log("Response: ", response.transactionHash,"\n", JSON.parse(fromUtf8(response.data)));
+  console.log("Response: ", response.transactionHash,"\n", base64ToJson(response.data));
 
   handleMsg = {
       set_contract : {
@@ -550,7 +594,7 @@ const main = async () => {
     }
   }
   response = await client.execute(Stakingcontract.contractAddress,handleMsg);
-  console.log("Response: ", response.transactionHash,"\n", JSON.parse(fromUtf8(response.data)));
+  console.log("Response: ", response.transactionHash,"\n", base64ToJson(response.data));
 
 // Add staking contract as distributor recipient
     handleMsg = {
@@ -561,7 +605,7 @@ const main = async () => {
   }
   console.log(handleMsg);
   response = await client.execute(Distributorcontract.contractAddress,handleMsg);
-  console.log("Response: ", response.transactionHash,"\n", JSON.parse(fromUtf8(response.data)));
+  console.log("Response: ", response.transactionHash,"\n", base64ToJson(response.data));
 
   // queue and toggle reward manager
   handleMsg = {
@@ -571,7 +615,7 @@ const main = async () => {
     }
   }
   response = await client.execute(treasurycontract.contractAddress,handleMsg);
-  console.log("Response: ", response.transactionHash,"\n", JSON.parse(fromUtf8(response.data)));
+  console.log("Response: ", response.transactionHash,"\n", base64ToJson(response.data));
 
   handleMsg = {
       toggle_queue: {
@@ -580,7 +624,7 @@ const main = async () => {
     }
   }
   response = await client.execute(treasurycontract.contractAddress,handleMsg);
-  console.log("Response: ", response.transactionHash,"\n", JSON.parse(fromUtf8(response.data)));
+  console.log("Response: ", response.transactionHash,"\n", base64ToJson(response.data));
 
   // queue and toggle deployer reserve depositor
   handleMsg = {
@@ -590,7 +634,7 @@ const main = async () => {
     }
   }
   response = await client.execute(treasurycontract.contractAddress,handleMsg);
-  console.log("Response: ", response.transactionHash,"\n", JSON.parse(fromUtf8(response.data)));
+  console.log("Response: ", response.transactionHash,"\n", base64ToJson(response.data));
 
   handleMsg = {
       toggle_queue: {
@@ -599,7 +643,7 @@ const main = async () => {
     }
   }
   response = await client.execute(treasurycontract.contractAddress,handleMsg);
-  console.log("Response: ", response.transactionHash,"\n", JSON.parse(fromUtf8(response.data)));
+  console.log("Response: ", response.transactionHash,"\n", base64ToJson(response.data));
 
   // queue and toggle liquidity depositor
   handleMsg = {
@@ -609,7 +653,7 @@ const main = async () => {
     }
   }
   response = await client.execute(treasurycontract.contractAddress,handleMsg);
-  console.log("Response: ", response.transactionHash,"\n", JSON.parse(fromUtf8(response.data)));
+  console.log("Response: ", response.transactionHash,"\n", base64ToJson(response.data));
 
   handleMsg = {
       toggle_queue: {
@@ -618,7 +662,7 @@ const main = async () => {
     }
   }
   response = await client.execute(treasurycontract.contractAddress,handleMsg);
-  console.log("Response: ", response.transactionHash,"\n", JSON.parse(fromUtf8(response.data)));
+  console.log("Response: ", response.transactionHash,"\n", base64ToJson(response.data));
 
   /* Allow the treasury to mint new OHM */
   handleMsg = {
@@ -639,7 +683,7 @@ const main = async () => {
     }
   };
   console.log(handleMsg);
-  reponse = await client.execute(sUSTcontract.contractAddress,handleMsg); 
+  response = await client.execute(sUSTcontract.contractAddress,handleMsg); 
   console.log("Deposited UST");
 
   /* Deposit sSCRT into the treasury */
@@ -656,16 +700,58 @@ const main = async () => {
   response = await client.execute(sUSTcontract.contractAddress,handleMsg); 
   console.log("Deposited sSCRT");
 
-  // Query chain ID
-  const chainId = await client.getChainId()
+   /* We stake some OHM */
+  handleMsg = {
+      send : {
+      "recipient":Stakingcontract.contractAddress,
+      "recipient_code_hash":StakingcontractCodeHash,
+      "amount":"100000000000",
+      "msg" : Buffer.from(JSON.stringify({stake: {recipient: accAddress}})).toString('base64')
+    }
+  }
 
-  // Query chain height
-  const height = await client.getHeight()
+  response = await client.execute(OHMcontract.contractAddress,handleMsg);
+  console.log("Staked some OHM");
+  
+  /* And then claim it from the warmup contract */
+  handleMsg = {
+      claim : {
+      "recipient":accAddress
+    }
+  }
 
-  console.log("ChainId:", chainId);
-  console.log("Block height:", height);
+  console.log(handleMsg);
+  response = await client.execute(Stakingcontract.contractAddress,handleMsg);
+  console.log("And Claimed from Warmup");
 
-  console.log('Successfully connected to Secret Network');
+  /* We bond some UST */
+  handleMsg = {
+      send : {
+      "recipient":sUSTBondContract.contractAddress,
+      "recipient_code_hash":sUSTBondContractCodeHash,
+      "amount":"1000000000",
+      "msg" : Buffer.from(JSON.stringify({deposit :{max_price:'60000', depositor:await get_address()}})).toString('base64')
+    }
+  }
+
+  response = await client.execute(sUSTcontract.contractAddress,handleMsg);
+  console.log("Bonded some sUST");
+
+
+ /* We bond some SCRT */
+  handleMsg = {
+      send : {
+      "recipient":sSCRTBondContract.contractAddress,
+      "recipient_code_hash":sSCRTBondContractCodeHash,
+      "amount":"100000000",
+      "msg" : Buffer.from(JSON.stringify({deposit : {max_price:'60000', depositor:await get_address()}})).toString('base64')
+    }
+  }
+
+  response = await client.execute(sSCRTcontract.contractAddress,handleMsg);
+  console.log("Bonded some sSCRT");
+
+  console.log('Successfully Deployed the contract');
 }
 
 main().then(resp => {

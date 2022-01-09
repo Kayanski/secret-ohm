@@ -103,6 +103,33 @@ fn pad_response(response: StdResult<HandleResponse>) -> StdResult<HandleResponse
 pub fn get_total_gons() -> U256{
     U256::MAX - (U256::MAX % U256::from(INITIAL_FRAGMENTS_SUPPLY))
 }
+
+pub fn query_balance_for_gons<S: Storage, A: Api, Q: Querier>(
+    deps: & Extern<S, A, Q>,
+    gons: String
+    ) -> QueryResult{
+
+    let consts = ReadonlyConfig::from_storage(&deps.storage).constants()?;
+    let amount = balance_for_gons(U256::from_dec_str(&consts.gons_per_fragment).unwrap(),U256::from_dec_str(&gons).unwrap())?;
+
+    to_binary(&QueryAnswer::BalanceForGons {
+        amount: Uint128(amount)
+    })
+}
+
+pub fn query_gons_for_balance<S: Storage, A: Api, Q: Querier>(
+    deps: & Extern<S, A, Q>,
+    amount: Uint128
+    ) -> QueryResult{
+
+    let consts = ReadonlyConfig::from_storage(&deps.storage).constants()?;
+    let gons = gons_for_balance(U256::from_dec_str(&consts.gons_per_fragment).unwrap(),U256::from(amount.u128()))?;
+
+    to_binary(&QueryAnswer::GonsForBalance {
+        gons: gons.to_string()
+    })
+}
+
 pub fn gons_for_balance(
     gons_per_fragment: U256,
     amount: U256
@@ -114,8 +141,10 @@ pub fn gons_for_balance(
 pub fn balance_for_gons(
     gons_per_fragment: U256,
     gons: U256
-)-> u128{
-    gons.checked_div(gons_per_fragment).unwrap().as_u128()
+)-> StdResult<u128>{
+    Ok(gons.checked_div(gons_per_fragment).ok_or_else(|| {
+        StdError::generic_err("Opely, you can't divide the gons that easily")
+    })?.as_u128())
 }
 
 pub fn balance_of<S: Storage, A: Api, Q: Querier>(
@@ -128,13 +157,34 @@ pub fn balance_of<S: Storage, A: Api, Q: Querier>(
     let gon_amount = ReadonlyGonBalances::from_storage(&deps.storage).account_amount(&address);
     gon_amount.checked_div(gons_per_fragment).unwrap().as_u128()
 }
+
+fn query_circulating_supply<S: Storage, A: Api, Q: Querier>(
+    deps: & Extern<S, A, Q>
+) -> QueryResult {
+    to_binary(&QueryAnswer::CirculatingSupply {
+        circulating_supply: Uint128(circulating_supply(deps)?)
+    })
+}
+
 pub fn circulating_supply<S: Storage, A: Api, Q: Querier>(
     deps: & Extern<S, A, Q>
 )-> StdResult<u128>{
 
     let config = ReadonlyConfig::from_storage(& deps.storage);
     config.total_supply().checked_sub(balance_of(&deps,&config.constants()?.staking_contract.unwrap())).ok_or_else(|| {
-        StdError::generic_err("Nope, not possible to get the total cicrulatin supply, weird...")
+        StdError::generic_err("Nope, not possible to get the total circulating supply, weird...")
+    })
+}
+
+fn query_index<S: Storage, A: Api, Q: Querier>(
+    deps: & Extern<S, A, Q>
+) -> QueryResult {
+    let consts = ReadonlyConfig::from_storage(&deps.storage).constants()?;
+    let gons_per_fragment = U256::from_dec_str(&consts.gons_per_fragment).unwrap();
+    let index_gons = U256::from_dec_str(&consts.index).unwrap();
+
+    to_binary(&QueryAnswer::Index {
+        index: Uint128(balance_for_gons(gons_per_fragment, index_gons)?)
     })
 }
 
@@ -146,24 +196,32 @@ pub fn rebase<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<HandleResponse> {
     let config = ReadonlyConfig::from_storage(&deps.storage);
     let mut total_supply = config.total_supply();
-    let mut rebase_amount: u128 = 0;
+    let rebase_amount;
     let current_circulating_supply: u128 = circulating_supply(&deps)?;
     if profit == 0{
-        //TODO Send return message with no profit
+        return Ok(HandleResponse {
+            messages: vec![],
+            log: vec![],
+            data: Some(to_binary(&HandleAnswer::Rebase { status: Success })?),
+        });
     }else if current_circulating_supply > 0{
-        rebase_amount = profit.checked_mul(total_supply).unwrap().checked_div(current_circulating_supply).unwrap();
+        rebase_amount = profit * total_supply / current_circulating_supply;
     }else{
         rebase_amount = profit;
     }
+
     if let Some(new_total_supply) = total_supply.checked_add(rebase_amount) {
         total_supply = new_total_supply;
     } else {
         total_supply = MAX_SUPPLY;
     }
+
     //Now we can start modifying config (after all the computations are made)
     let mut config = Config::from_storage(&mut deps.storage);
     check_if_staking_contract(&config,&env.message.sender)?;
+
     config.set_total_supply(total_supply);
+
     if let Some(new_gons_per_fragment) = get_total_gons().checked_div(U256::from(total_supply)) {
         let mut consts = config.constants()?;
         consts.gons_per_fragment = U256::to_string(&new_gons_per_fragment);
@@ -173,11 +231,11 @@ pub fn rebase<S: Storage, A: Api, Q: Querier>(
             "Can't rebase, the new gons per fragment can't be computed"
         ));
     }
-    let rebase_percent: u128 = profit.checked_mul(10_u128.pow(18)).ok_or(
+    let rebase_percent: u128 = profit.checked_mul(10_u128.pow(18)).ok_or_else(||
         StdError::generic_err(
             "Can't rebase, the new gons per fragment can't be computed"
         )
-    )?/current_circulating_supply;
+    )?.checked_div(current_circulating_supply).unwrap_or_else(|| 0);
 
     let index = config.constants()?.index.clone();
     let new_circulating_supply = circulating_supply(&deps)?;
@@ -227,7 +285,7 @@ pub fn initialize<S: Storage, A: Api, Q: Querier>(
         &mut deps.storage,
         &canon_admin,
         &canon_staking_contract,
-        Uint128(balance_for_gons(U256::from_dec_str(&gons_per_fragment).unwrap(),get_total_gons())),
+        Uint128(balance_for_gons(U256::from_dec_str(&gons_per_fragment).unwrap(),get_total_gons())?),
         consts.symbol.clone(),
         Some("Initial Gon Balance".to_string()),
         &env.block,
@@ -240,16 +298,6 @@ pub fn initialize<S: Storage, A: Api, Q: Querier>(
     })
 
 }
-
-
-fn query_circulating_supply<S: Storage, A: Api, Q: Querier>(
-    deps: & Extern<S, A, Q>
-) -> QueryResult {
-    to_binary(&QueryAnswer::CirculatingSupply {
-        circulating_supply: Uint128(circulating_supply(deps)?)
-    })
-}
-
 
 pub fn handle<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
@@ -338,7 +386,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         }
         HandleMsg::BatchSendFrom { actions, .. } => try_batch_send_from(deps, env, actions),
         
-        HandleMsg::Rebase { profit, epoch } => rebase(deps,env,profit,epoch),
+        HandleMsg::Rebase { profit, epoch } => rebase(deps,env,profit.u128(),epoch),
         HandleMsg::Initialize { staking_contract,.. } => initialize(deps,env,staking_contract),
 
         // Other
@@ -358,7 +406,11 @@ pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryM
         QueryMsg::ExchangeRate {} => query_exchange_rate(&deps.storage),
 
         QueryMsg::CirculatingSupply {} => query_circulating_supply(deps),
+        QueryMsg::Index {} => query_index(deps),
         QueryMsg::RebaseHistory {page, page_size} => query_rebases(deps, page.unwrap_or(0), page_size),
+
+        QueryMsg::GonsForBalance{amount} => query_gons_for_balance(deps,amount),
+        QueryMsg::BalanceForGons{gons} => query_balance_for_gons(deps,gons),
 
         QueryMsg::WithPermit { permit, query } => permit_queries(deps, permit, query),
         _ => viewing_keys_queries(deps, msg),

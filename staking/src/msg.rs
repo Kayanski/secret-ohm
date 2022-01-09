@@ -599,7 +599,7 @@ impl HandleCallback for DistributorHandleMsg{
 #[serde(rename_all = "snake_case")]
 pub enum WarmupContractHandleMsg{
     Retrieve{
-        address: HumanAddr,
+        staker: HumanAddr,
         amount: Uint128
     }
 }
@@ -611,7 +611,7 @@ impl HandleCallback for WarmupContractHandleMsg{
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SOhmQueryMsg{
-    GetCirculatingSupply{
+    CirculatingSupply{
 
     },
     GonsForBalance{

@@ -160,7 +160,7 @@ pub enum HandleMsg {
     },
 
     Rebase{
-        profit: u128,
+        profit: Uint128,
         epoch: u64
     },
 
@@ -325,6 +325,7 @@ pub enum QueryMsg {
         page_size: u32,
     },
     CirculatingSupply{},
+    Index{},
     WithPermit {
         permit: Permit,
         query: QueryWithPermit,
@@ -423,6 +424,9 @@ pub enum QueryAnswer {
     },
     CirculatingSupply {
         circulating_supply: Uint128,
+    },
+    Index{
+        index: Uint128,
     },
     GonsForBalance{
         gons: String,

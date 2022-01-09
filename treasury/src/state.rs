@@ -38,8 +38,6 @@ pub const QUEUE_POSTFIX : &str = "_queue";
 pub const POSITION_POSTFIX : &str = "_position";
 pub const MANAGING_ROLE_POSTFIX : &str = "_managing"; 
 
-pub const COMMON_VIEWING_KEY : &str = "ALL_ORGANISATION_INFO_SHOULD_BE_PUBLIC";
-
 pub const RESPONSE_BLOCK_SIZE: usize = 256;
 
 //Bond Valuation
@@ -128,7 +126,7 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfig<'a, S> {
         self.as_readonly().total_reserves()
     }
 
-    pub fn excess_reserves<Q: Querier> (&self, querier : &Q) -> u128 {
+    pub fn excess_reserves<Q: Querier> (&self, querier : &Q) -> StdResult<u128> {
         self.as_readonly().excess_reserves(querier)
     }
 
@@ -170,11 +168,6 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfig<'a, S> {
 
     pub fn bond_calculator(&self, token : HumanAddr) -> Contract{
         self.as_readonly().bond_calculator(token)
-    }
-
-    pub fn get_viewing_key(&self, address : HumanAddr) -> String{
-        self.as_readonly().get_viewing_key(address)
-
     }
 
     pub fn value_of<Q: Querier> (&self, querier: &Q,token : Contract,amount:u128) -> StdResult<u128>{
@@ -265,10 +258,11 @@ impl<'a, S: Storage> Config<'a, S> {
     pub fn set_managing_position(&mut self,address: &CanonicalAddr,role : ManagingRole,value : bool) -> StdResult<()> {
         let role_string : String = role.to_string() + POSITION_POSTFIX;
         bucket(&role_string.into_bytes(), &mut self.storage).save(address.as_slice(),&value)?;
+        self.remove_managing_addresses(vec![address.clone()],role.clone())?;
         if value{
             self.add_managing_addresses(vec![address.clone()],role)
         }else{
-            self.remove_managing_addresses(vec![address.clone()],role)
+            Ok(())
         }
     }
 
@@ -285,7 +279,7 @@ impl<'a, S: Storage> Config<'a, S> {
         self.as_readonly().total_reserves()
     }
 
-    pub fn excess_reserves<Q: Querier> (&self, querier : &Q) -> u128 {
+    pub fn excess_reserves<Q: Querier> (&self, querier : &Q) -> StdResult<u128> {
         self.as_readonly().excess_reserves(querier)
     }
 
@@ -402,11 +396,6 @@ impl<'a, S: Storage> Config<'a, S> {
         bucket(&KEY_BOND_CALCULATOR, &mut self.storage).save(token.as_str().as_bytes(),&calculator)
     }
 
-    pub fn get_viewing_key(&mut self, address : HumanAddr) -> String{
-        self.as_readonly().get_viewing_key(address)
-
-    }
-
     pub fn value_of<Q: Querier> (&self, querier: &Q, token : Contract,amount:u128) -> StdResult<u128>{
         self.as_readonly().value_of(querier,token,amount)
     }
@@ -431,7 +420,7 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
 
     pub fn managing_addresses(&self, role : ManagingRole) -> Vec<CanonicalAddr> { 
         let role_string : String = role.to_string() + MANAGING_ROLE_POSTFIX;
-        get_bin_data(self.0,&role_string.into_bytes()).unwrap()
+        get_bin_data(self.0,&role_string.into_bytes()).unwrap_or_default()
     }
 
     pub fn managing_position(&self,address: &CanonicalAddr,role : ManagingRole) -> Option<bool> {
@@ -460,19 +449,19 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
             .get(KEY_TOTAL_RESERVES)
             .expect("no total reserves stored in config");
         // This unwrap is ok because we know we stored things correctly
-        slice_to_u128(&reserves_bytes).unwrap()
+        slice_to_u128(&reserves_bytes).unwrap_or_default()
     }
 
-    fn excess_reserves<Q: Querier> (&self, querier : &Q)-> u128 {
+    fn excess_reserves<Q: Querier> (&self, querier : &Q)-> StdResult<u128> {
 
         let ohm_token_info = snip20::token_info_query(
             querier,
             RESPONSE_BLOCK_SIZE,
-            self.constants().unwrap().ohm.code_hash,
-            self.constants().unwrap().ohm.address
-        ).unwrap(); 
-        let total_ohm_supply = ohm_token_info.total_supply.unwrap().u128();
-        self.total_reserves().checked_sub(total_ohm_supply.checked_sub(self.total_debt()).unwrap()).unwrap()
+            self.constants()?.ohm.code_hash,
+            self.constants()?.ohm.address
+        )?; 
+        let total_ohm_supply = ohm_token_info.total_supply.unwrap_or_default().u128();
+        Ok(self.total_reserves() - (total_ohm_supply - self.total_debt()))
     }
 
     fn total_debt(&self) -> u128 {
@@ -481,7 +470,7 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
             .get(KEY_TOTAL_DEBT)
             .expect("no total debt stored in config");
         // This unwrap is ok because we know we stored things correctly
-        slice_to_u128(&debt_bytes).unwrap()
+        slice_to_u128(&debt_bytes).unwrap_or_default()
     }
 
     fn contract_status(&self) -> ContractStatusLevel {
@@ -496,7 +485,7 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
     }
 
     fn minters(&self) -> Vec<HumanAddr> {
-        get_bin_data(self.0, KEY_MINTERS).unwrap()
+        get_bin_data(self.0, KEY_MINTERS).unwrap_or_default()
     }
 
     pub fn tx_count(&self) -> u64 {
@@ -504,7 +493,7 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
     }
 
     fn reserve_tokens(&self) -> Vec<Contract> {
-        get_bin_data(self.0, KEY_RESERVE_TOKENS).unwrap()
+        get_bin_data(self.0, KEY_RESERVE_TOKENS).unwrap_or_default()
     }
 
     pub fn get_reserve_token_info(&self, token : HumanAddr) -> StdResult<Contract>{
@@ -520,7 +509,7 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
     }
 
     fn liquidity_tokens(&self) -> Vec<Contract> {
-        get_bin_data(self.0, KEY_LIQUIDITY_TOKENS).unwrap()
+        get_bin_data(self.0, KEY_LIQUIDITY_TOKENS).unwrap_or_default()
     }
 
     pub fn is_liquidity_token(&self, token : HumanAddr) -> bool {
@@ -534,10 +523,6 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
 
     pub fn bond_calculator(&self, token : HumanAddr) -> Contract{
         bucket_read(KEY_BOND_CALCULATOR, self.0).load(token.as_str().as_bytes()).unwrap()
-    }
-
-    pub fn get_viewing_key(&self, _address : HumanAddr) -> String {
-        COMMON_VIEWING_KEY.to_string()
     }
 
     pub fn value_of<Q: Querier> (&self, querier: &Q,token : Contract,amount:u128) -> StdResult<u128>{

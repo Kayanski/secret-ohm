@@ -7,52 +7,6 @@ const fs = require("fs");
 const { fromBase64 } = require("@iov/encoding");
 require('dotenv').config();
 
-
-//DAO Address
-const DAOAddress = "secretnothing189765"
-
-// Initial staking index
-const initialIndex = '7675210820';
-
-// First block epoch occurs
-const firstEpochBlock = 8961000;
-
-// What epoch will be first epoch
-const firstEpochNumber = 338;
-
-// How many blocks are in each epoch
-const epochLengthInBlocks = 2200;
-
-// Initial reward rate for epoch
-const initialRewardRate = '3000';
-
-// Initial mint for Frax and DAI (10,000,000)
-const initialMint = '10000000000000000000000000';
-
-// DAI bond BCV
-const daiBondBCV = '369';
-
-// Frax bond BCV
-const fraxBondBCV = '690';
-
-// Bond vesting length in blocks. 33110 ~ 5 days
-const bondVestingLength = '33110';
-
-// Min bond price
-const minBondPrice = '50000';
-
-// Max bond payout
-const maxBondPayout = '50'
-
-// DAO fee for bond
-const bondFee = '10000';
-
-// Max debt bond can take on
-const maxBondDebt = '1000000000000000';
-
-// Initial Bond debt
-const intialBondDebt = '0'
-
 //Fees
 
 
@@ -127,42 +81,29 @@ async function get_client(){
   return client
 }
 
-async function upload_contract(contract_file, client, initMsg){
-
-  // Upload the wasm of a simple contract
-  const wasm = fs.readFileSync(contract_file);
-  console.log(wasm);
-  console.log('Uploading contract')
-  const uploadReceipt = await client.upload(wasm, {});
-
-  // Get the code ID from the receipt
-  const codeId = uploadReceipt.codeId;
-  console.log('codeId: ', codeId);
-
-  // contract hash, useful for contract composition
-  const contractCodeHash = await client.restClient.getCodeHashByCodeId(codeId);
-  console.log(`Contract hash: ${contractCodeHash}`);
-
-  // Create an instance of the Counter contract, providing a starting count
-  const contract = await client.instantiate(codeId, initMsg, "My Counter" + Math.ceil(Math.random()*10000));
-  console.log('contract: ', contract);
-  return [contractCodeHash,contract]
-
+const getAPY = async(client,tokenContract) => {
+  console.log('Querying the APY...');
+  let response = await client.queryContractSmart(tokenContract.contractAddress, { "get_count": {}});
+  console.log(response);
+  return response["apy"];
 }
 
-const snip_contract = "../snip20impl/contract.wasm"
+const getTotalValueDeposited = async(client,tokenContract) => {
+  console.log('Querying the Value Deposited...');
+  let response = await client.queryContractSmart(tokenContract.contractAddress, { "contract_balance": {}});
+  console.log(response);
+  return response["amount"];
+}
 
-function _arrayBufferToBase64( buffer ) {
-    var binary = '';
-    var bytes = new Uint8Array( buffer );
-    var len = bytes.byteLength;
-    for (var i = 0; i < len; i++) {
-        binary += String.fromCharCode( bytes[ i ] );
-    }
-    return window.btoa( binary );
+const getIndex = async(client,tokenContract) => {
+  console.log('Querying the Index...');
+  let response = await client.queryContractSmart(tokenContract.contractAddress, { "index": {}});
+  console.log(response);
+  return response["index"];
 }
 
 const main = async () => {
+
 
   // Create connection to DataHub Secret Network node
   const client = await get_client();
@@ -178,63 +119,19 @@ const main = async () => {
   const [treasurycontractCodeHash, treasurycontract]  = await contracts["treasury"];
   const [CalculatorcontractCodeHash, Calculatorcontract] = await contracts["bond_calculator"];
   const [DistributorcontractCodeHash, Distributorcontract] = await contracts["staking_distributor"];
-  const  [StakingcontractCodeHash, Stakingcontract] = await contracts["staking"];
+  const [StakingcontractCodeHash, Stakingcontract] = await contracts["staking"];
   const [StakingWarmupContractCodeHash, StakingWarmupContract] = await contracts["staking-warmup"];
   const [sUSTBondContractCodeHash, sUSTBondContract] = contracts["sUST-bond"];
   const [sSCRTBondContractCodeHash, sSCRTBondContract] = contracts["sSCRT-bond"];
-   
-
-  let handleMsg,response;
-  /*
-  hyiuy
-  queryMsg = {
-    debt_decay:{block_height:1000}
-  };
-  */
-
-  queryMsg = {
-    bond_price_in_usd:{block_height:500}
-  };
-
-  queryMsg = {
-    max_payout:{}
-  };
-  queryMsg = {
-    gons_for_balance:{amount:"1"}
-  };
   
-  response = await client.queryContractSmart(sOHMcontract.contractAddress,queryMsg)
-  console.log(response);
+  console.log(base64ToJson("eyJ2aWV3aW5nX2tleV9lcnJvciI6eyJtc2ciOiJXcm9uZyB2aWV3aW5nIGtleSBmb3IgdGhpcyBhZGRyZXNzIG9yIHZpZXdpbmcga2V5IG5vdCBzZXQifX0="));
 
-  queryMsg = {
-    index:{}
-  };
-  
-  response = await client.queryContractSmart(sOHMcontract.contractAddress,queryMsg)
-  console.log(response);
+  await getIndex(client,Stakingcontract);
+  await getTotalValueDeposited(client,Stakingcontract);
 
-  queryMsg = {
-    rebase_history:{page_size:10}
-  };
-
-  response = await client.queryContractSmart(sOHMcontract.contractAddress,queryMsg)
-  console.log(response);
-
-  let data = JSON.stringify(contracts);
-  fs.writeFileSync('contract_data.json', data);
-
-
-  // Query chain ID
-  const chainId = await client.getChainId()
-
-  // Query chain height
-  const height = await client.getHeight()
-
-  console.log("ChainId:", chainId);
-  console.log("Block height:", height);
-
-  console.log('Successfully connected to Secret Network');
 }
+
+
 
 main().then(resp => {
   console.log(resp);

@@ -156,6 +156,10 @@ pub enum QueryMsg {
         role: ManagingRole
     },
     ContractStatus {},
+    ValueOf{
+        token: HumanAddr,
+        amount: Uint128
+    },
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
@@ -178,6 +182,9 @@ pub enum QueryAnswer {
     ContractStatus {
         status: ContractStatusLevel,
     },
+    ValueOf{
+        value: Uint128,
+    }
 }
 pub fn contract_info_from_constants(constants : &Constants) -> QueryAnswer{
     QueryAnswer::ContractInfo{

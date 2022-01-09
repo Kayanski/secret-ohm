@@ -1,12 +1,19 @@
 const {
-  EnigmaUtils, Secp256k1Pen, SigningCosmWasmClient, pubkeyToAddress, encodeSecp256k1Pubkey
+  CosmWasmClient, EnigmaUtils, Secp256k1Pen, SigningCosmWasmClient, pubkeyToAddress, encodeSecp256k1Pubkey
 } = require("secretjs");
+
+const uuid = require("uuid");
 
 const fs = require("fs");
 
-const { fromBase64 } = require("@iov/encoding");
 require('dotenv').config();
 
+function jsonToBase64(json){
+  return Buffer.from(JSON.stringify(json)).toString('base64')
+}
+function base64ToJson(base64String){
+  return JSON.parse(Buffer.from(base64String,'base64').toString('utf8'));
+}
 
 //DAO Address
 const DAOAddress = "secretnothing189765"
@@ -36,7 +43,7 @@ const daiBondBCV = '369';
 const fraxBondBCV = '690';
 
 // Bond vesting length in blocks. 33110 ~ 5 days
-const bondVestingLength = '33110';
+const bondVestingLength = 33110;
 
 // Min bond price
 const minBondPrice = '50000';
@@ -51,7 +58,7 @@ const bondFee = '10000';
 const maxBondDebt = '1000000000000000';
 
 // Initial Bond debt
-const intialBondDebt = '0'
+const initialBondDebt = '0'
 
 //Fees
 
@@ -75,18 +82,16 @@ const customFees = {
   },
 }
 
-function jsonToBase64(json){
-  return Buffer.from(JSON.stringify(json)).toString('base64')
-}
-function base64ToJson(base64String){
-  return JSON.parse(Buffer.from(base64String,'base64').toString('utf8'));
+async function get_testnet_default_address(){
+  return get_address(process.env.MNEMONIC_TESTNET);
 }
 
+async function get_account_address(){
+  return get_address(process.env.MNEMONIC);
+}
 
-async function get_address(){
-  // Use key created in tutorial #2
-  const mnemonic = process.env.MNEMONIC;
-
+async function get_address(mnemonic){
+  
   // A pen is the most basic tool you can think of for signing.
   // This wraps a single keypair and allows for signing.
   const signingPen = await Secp256k1Pen.fromMnemonic(mnemonic);
@@ -96,15 +101,15 @@ async function get_address(){
 
   // get the wallet address
   const accAddress = pubkeyToAddress(pubkey, 'secret');
-  return accAddress;
 
+  return accAddress;
 }
 
-async function get_client(){
+async function get_client(mnemonic){
   const httpUrl = process.env.SECRET_REST_URL;
 
   // Use key created in tutorial #2
-  const mnemonic = process.env.MNEMONIC;
+  
 
   // A pen is the most basic tool you can think of for signing.
   // This wraps a single keypair and allows for signing.
@@ -152,88 +157,54 @@ async function upload_contract(contract_file, client, initMsg){
 
 const snip_contract = "../snip20impl/contract.wasm"
 
-function _arrayBufferToBase64( buffer ) {
-    var binary = '';
-    var bytes = new Uint8Array( buffer );
-    var len = bytes.byteLength;
-    for (var i = 0; i < len; i++) {
-        binary += String.fromCharCode( bytes[ i ] );
-    }
-    return window.btoa( binary );
-}
 
 const main = async () => {
 
+
+  //Send funds from the tesnet address to the account address : 
+
+
+  console.log("Init...");
   // Create connection to DataHub Secret Network node
-  const client = await get_client();
-  const accAddress = await get_address();
-
-  let rawdata = fs.readFileSync('contract_data.json');
-  let contracts = JSON.parse(rawdata);
-
-  const [sSCRTcontractCodeHash, sSCRTcontract] = await contracts["sSCRT"];
-  const [sUSTcontractCodeHash, sUSTcontract] = await contracts["sUST"];
-  const [OHMcontractCodeHash, OHMcontract] = await contracts["OHM"];
-  const [sOHMcontractCodeHash, sOHMcontract] = await contracts["sOHM"];
-  const [treasurycontractCodeHash, treasurycontract]  = await contracts["treasury"];
-  const [CalculatorcontractCodeHash, Calculatorcontract] = await contracts["bond_calculator"];
-  const [DistributorcontractCodeHash, Distributorcontract] = await contracts["staking_distributor"];
-  const  [StakingcontractCodeHash, Stakingcontract] = await contracts["staking"];
-  const [StakingWarmupContractCodeHash, StakingWarmupContract] = await contracts["staking-warmup"];
-  const [sUSTBondContractCodeHash, sUSTBondContract] = contracts["sUST-bond"];
-  const [sSCRTBondContractCodeHash, sSCRTBondContract] = contracts["sSCRT-bond"];
-   
-
-  let handleMsg,response;
-  /*
-  hyiuy
-  queryMsg = {
-    debt_decay:{block_height:1000}
-  };
-  */
-
-  queryMsg = {
-    bond_price_in_usd:{block_height:500}
+  let client = await get_client(process.env.MNEMONIC_TESTNET);
+  const sendMsg = {
+      type: "cosmos-sdk/MsgSend",
+      value: {
+          from_address: await get_testnet_default_address(),
+          to_address: await get_account_address(),
+          amount: [
+              {
+                  denom: "uscrt",
+                  amount: "1000000",
+              },
+          ],
+      },
   };
 
-  queryMsg = {
-    max_payout:{}
+  console.log("sendMsg",sendMsg);
+  const memo = "None";
+  const fee = customFees["send"];
+  console.log("signBytes");
+  client = new CosmWasmClient(process.env.SECRET_REST_URL);
+  const chainId = await client.getChainId();
+  const { accountNumber, sequence } = await client.getNonce(await get_testnet_default_address);
+
+  console.log("signBytes");
+  const signBytes = makeSignBytes([sendMsg], fee, chainId, memo, accountNumber, sequence);
+  const signature = await signingPen.sign(signBytes);
+  const signedTx = {
+      msg: [sendMsg],
+      fee: fee,
+      memo: memo,
+      signatures: [signature],
   };
-  queryMsg = {
-    gons_for_balance:{amount:"1"}
-  };
+
+  console.log("Sending...");
+  let response = await client.postTx(signedTx);
+
+  console.log(response);
+  client = await get_client(process.env.MNEMONIC);
   
-  response = await client.queryContractSmart(sOHMcontract.contractAddress,queryMsg)
-  console.log(response);
-
-  queryMsg = {
-    index:{}
-  };
-  
-  response = await client.queryContractSmart(sOHMcontract.contractAddress,queryMsg)
-  console.log(response);
-
-  queryMsg = {
-    rebase_history:{page_size:10}
-  };
-
-  response = await client.queryContractSmart(sOHMcontract.contractAddress,queryMsg)
-  console.log(response);
-
-  let data = JSON.stringify(contracts);
-  fs.writeFileSync('contract_data.json', data);
-
-
-  // Query chain ID
-  const chainId = await client.getChainId()
-
-  // Query chain height
-  const height = await client.getHeight()
-
-  console.log("ChainId:", chainId);
-  console.log("Block height:", height);
-
-  console.log('Successfully connected to Secret Network');
 }
 
 main().then(resp => {

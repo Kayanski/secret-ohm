@@ -21,6 +21,7 @@ use secret_toolkit::snip20;
 /// We make sure that responses from `handle` are padded to a multiple of this size.
 pub const RESPONSE_BLOCK_SIZE: usize = 256;
 pub const PREFIX_REVOKED_PERMITS: &str = "revoked_permits";
+pub const COMMON_VIEWING_KEY : &str = "ALL_ORGANISATION_INFO_SHOULD_BE_PUBLIC";
 
 pub fn init<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
@@ -42,8 +43,8 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     let mut config = Config::from_storage(&mut deps.storage);
 
     config.set_constants(&Constants {
-        ohm: msg.ohm,
-        sohm: msg.sohm,
+        ohm: msg.ohm.clone(),
+        sohm: msg.sohm.clone(),
         name: msg.name,
         admin: admin.clone(),
         prng_seed: prng_seed_hashed.to_vec(),
@@ -70,7 +71,15 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             RESPONSE_BLOCK_SIZE,
             token.code_hash.clone(),
             token.address.clone(),
-        )?)
+        )?);
+        messages.push(
+        snip20::set_viewing_key_msg(
+            COMMON_VIEWING_KEY.to_string(),
+            None,
+            RESPONSE_BLOCK_SIZE,
+            token.code_hash.clone(),
+            token.address.clone(),
+        )?);
     }
     //Liquidity
     for token in config.liquidity_tokens(){
@@ -81,8 +90,37 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             RESPONSE_BLOCK_SIZE,
             token.code_hash.clone(),
             token.address.clone(),
-        )?)
+        )?);
+        messages.push(
+        snip20::set_viewing_key_msg(
+            COMMON_VIEWING_KEY.to_string(),
+            None,
+            RESPONSE_BLOCK_SIZE,
+            token.code_hash.clone(),
+            token.address.clone(),
+        )?);
     }
+
+    //Add viewing keys for the ohm and sohm contracts
+    messages.push(
+        snip20::set_viewing_key_msg(
+            COMMON_VIEWING_KEY.to_string(),
+            None,
+            RESPONSE_BLOCK_SIZE,
+            msg.ohm.code_hash,
+            msg.ohm.address
+        )?
+    );
+    messages.push(
+        snip20::set_viewing_key_msg(
+            COMMON_VIEWING_KEY.to_string(),
+            None,
+            RESPONSE_BLOCK_SIZE,
+            msg.sohm.code_hash,
+            msg.sohm.address
+        )?
+    );
+
     Ok(InitResponse {
         messages,
         log: vec![],
@@ -138,9 +176,10 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
 pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryMsg) -> QueryResult {
     match msg {
         QueryMsg::ContractInfo {} => query_contract_info(&deps.storage),
-        QueryMsg::Contracts {role} => query_tokens(&deps.storage,role),
-        QueryMsg::ManagingAddresses {role} => query_managing_addresses(deps,role),
+        QueryMsg::Contracts {role} => query_tokens(&deps.storage, role),
+        QueryMsg::ManagingAddresses {role} => query_managing_addresses(deps, role),
         QueryMsg::ContractStatus {} => query_contract_status(&deps.storage),
+        QueryMsg::ValueOf{ token, amount } => query_value_of(deps, token, amount),
     }
 }
 
@@ -302,7 +341,7 @@ pub fn incur_debt<S: Storage, A: Api, Q: Querier>(
     let from_balance = snip20::balance_query(
         &deps.querier,
         sender.clone(),
-        config.get_viewing_key(sender.clone()),
+        COMMON_VIEWING_KEY.to_string(),
         RESPONSE_BLOCK_SIZE,
         config.constants()?.sohm.code_hash,
         config.constants()?.sohm.address
@@ -463,7 +502,7 @@ pub fn manage<S: Storage, A: Api, Q: Querier>(
     }
 
     let value = config.value_of(&deps.querier,config.get_reserve_token_info(token.clone())?,amount)?;
-    if value > config.excess_reserves(&deps.querier){
+    if value > config.excess_reserves(&deps.querier)?{
         return Err(StdError::generic_err(
                     "Insufficient reserves" ,
                 ));
@@ -511,7 +550,7 @@ pub fn mint_rewards<S: Storage, A: Api, Q: Querier>(
                     "Address not approved",
                 ));
     }
-    if amount > config.excess_reserves(&deps.querier)
+    if amount > config.excess_reserves(&deps.querier)?
     {
         return Err(StdError::generic_err(
                     "Insufficient reserves",
@@ -548,7 +587,7 @@ pub fn audit_reserves<S: Storage, A: Api, Q: Querier>(
         let balance = snip20::balance_query(
             &deps.querier,
             contract_address.clone(),
-            config.get_viewing_key(contract_address.clone()),
+            COMMON_VIEWING_KEY.to_string(),
             RESPONSE_BLOCK_SIZE,
             token.code_hash.clone(),
             token.address.clone()
@@ -562,7 +601,7 @@ pub fn audit_reserves<S: Storage, A: Api, Q: Querier>(
         let balance = snip20::balance_query(
             &deps.querier,
             contract_address.clone(),
-            config.get_viewing_key(contract_address.clone()),
+            COMMON_VIEWING_KEY.to_string(),
             RESPONSE_BLOCK_SIZE,
             token.code_hash.clone(),
             token.address.clone()
@@ -753,6 +792,24 @@ fn query_contract_status<S: ReadonlyStorage>(storage: &S) -> QueryResult {
 
     to_binary(&QueryAnswer::ContractStatus {
         status: config.contract_status(),
+    })
+}
+
+fn query_value_of<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    token: HumanAddr,
+    amount: Uint128
+    ) -> QueryResult {
+    let config = ReadonlyConfig::from_storage(&deps.storage);
+
+    to_binary(&QueryAnswer::ValueOf {
+        value: Uint128(
+            config.value_of(
+                &deps.querier,
+                config.get_reserve_token_info(token)?,
+                amount.u128()
+            )?
+        ),
     })
 }
 

@@ -13,7 +13,8 @@
           "required": [
             "amount",
             "from",
-            "msg"
+            "msg",
+            "sender"
           ],
           "properties": {
             "amount": {
@@ -24,6 +25,9 @@
             },
             "msg": {
               "$ref": "#/definitions/Binary"
+            },
+            "sender": {
+              "$ref": "#/definitions/HumanAddr"
             }
           }
         }

@@ -58,9 +58,48 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         warmup_period:0,
         contract_address:env.contract.address,
     })?;
+
+    let messages = vec![  
+        //Set register receive msgs  
+        snip20::register_receive_msg(
+            env.contract_code_hash.clone(),
+            None,
+            RESPONSE_BLOCK_SIZE,
+            msg.ohm.code_hash.clone(),
+            msg.ohm.address.clone()
+        )?, 
+        snip20::register_receive_msg(
+            env.contract_code_hash.clone(),
+            None,
+            RESPONSE_BLOCK_SIZE,
+            msg.sohm.code_hash.clone(),
+            msg.sohm.address.clone()
+        )?,
+        //Add viewing keys for the ohm and sohm contracts
+        snip20::set_viewing_key_msg(
+            COMMON_VIEWING_KEY.to_string(),
+            None,
+            RESPONSE_BLOCK_SIZE,
+            msg.ohm.code_hash,
+            msg.ohm.address
+        )?,
+        snip20::set_viewing_key_msg(
+            COMMON_VIEWING_KEY.to_string(),
+            None,
+            RESPONSE_BLOCK_SIZE,
+            msg.sohm.code_hash,
+            msg.sohm.address
+        )?,
+    ];
+
+
+
     config.set_contracts(&ConfigContracts::default())?;
     config.set_contract_status(ContractStatusLevel::NormalRun);
-    Ok(InitResponse::default())
+    Ok(InitResponse {
+        messages,
+        log: vec![],
+    })
 }
 
 fn pad_response(response: StdResult<HandleResponse>) -> StdResult<HandleResponse> {
@@ -170,7 +209,7 @@ pub fn rebase<S: Storage, A: Api, Q: Querier>(
         let balance = contract_balance(deps)?;
         let staked = {
             //We need to ask the contract for the circulating_supply
-            let circulating_supply_query_msg = SOhmQueryMsg::GetCirculatingSupply{};
+            let circulating_supply_query_msg = SOhmQueryMsg::CirculatingSupply{};
             let circulating_supply_response: CirculatingSupplyResponse = circulating_supply_query_msg.query(
                 &deps.querier,
                 consts.sohm.code_hash.clone(),
@@ -243,7 +282,7 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
         )?;
         //We send the retrieve message from the warmup contract
         let retrieve_msg = WarmupContractHandleMsg::Retrieve{
-            address: recipient,
+            staker: recipient,
             amount: balance_for_gons_response.balance_for_gons.amount
         };
         messages.push(
@@ -283,7 +322,7 @@ pub fn forfeit<S: Storage, A: Api, Q: Querier>(
     ).unwrap();
 //We send the retrieve message from the warmup contract
     let retrieve_msg = WarmupContractHandleMsg::Retrieve{
-        address: env.contract.address.clone(),
+        staker: env.contract.address.clone(),
         amount: balance_for_gons_response.balance_for_gons.amount
     };
     messages.push(
@@ -339,6 +378,7 @@ pub fn unstake<S: Storage, A: Api, Q: Querier>(
         messages.extend(rebase_response.messages);
     }
     let config = ReadonlyConfig::from_storage(&deps.storage);
+
     messages.push(
         snip20::transfer_msg(
             sender.clone(),
@@ -846,8 +886,6 @@ mod tests {
             sha_256("lolz fun yay".to_owned().as_bytes())
         );
     }
-
-
 
     #[test]
     fn test_stake(){
