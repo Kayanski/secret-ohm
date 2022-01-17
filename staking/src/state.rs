@@ -1,8 +1,10 @@
 use std::any::type_name;
 use std::convert::TryFrom;
 
-use cosmwasm_std::{CanonicalAddr, HumanAddr, ReadonlyStorage, StdError, StdResult, Storage, Uint128};
-use cosmwasm_storage::{PrefixedStorage, ReadonlyPrefixedStorage, bucket, bucket_read};
+use cosmwasm_std::{
+    CanonicalAddr, HumanAddr, ReadonlyStorage, StdError, StdResult, Storage, Uint128,
+};
+use cosmwasm_storage::{bucket, bucket_read, PrefixedStorage, ReadonlyPrefixedStorage};
 
 use secret_toolkit::storage::{TypedStore, TypedStoreMut};
 
@@ -15,13 +17,13 @@ use serde::de::DeserializeOwned;
 
 use primitive_types::U256;
 
-
 pub static CONFIG_KEY: &[u8] = b"config";
 pub const PREFIX_TXS: &[u8] = b"transfers";
 
 pub const KEY_CONSTANTS: &[u8] = b"constants";
 pub const KEY_CONTRACTS: &[u8] = b"contracts";
 pub const KEY_TOTAL_SUPPLY: &[u8] = b"total_supply";
+pub const KEY_CURRENTLY_STAKING: &[u8] = b"currently_staking";
 pub const KEY_CONTRACT_STATUS: &[u8] = b"contract_status";
 pub const KEY_WARMUP_INFO: &[u8] = b"warmup_info";
 pub const KEY_TX_COUNT: &[u8] = b"tx-count";
@@ -38,8 +40,8 @@ pub const PREFIX_RECEIVERS: &[u8] = b"receivers";
 pub struct Constants {
     pub admin: HumanAddr,
     pub prng_seed: Vec<u8>,
-    pub ohm : Contract,
-    pub sohm : Contract,
+    pub ohm: Contract,
+    pub sohm: Contract,
     pub epoch: Epoch,
     pub total_bonus: Uint128,
     pub warmup_period: u64,
@@ -48,15 +50,15 @@ pub struct Constants {
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, JsonSchema)]
-pub struct ConfigContracts{
-    pub distributor : Contract,
-    pub warmup : Contract,
-    pub locker: Contract
+pub struct ConfigContracts {
+    pub distributor: Contract,
+    pub warmup: Contract,
+    pub locker: Contract,
 }
 
-impl Default for ConfigContracts{
-    fn default() -> Self{
-        Self{
+impl Default for ConfigContracts {
+    fn default() -> Self {
+        Self {
             distributor: Contract::default(),
             warmup: Contract::default(),
             locker: Contract::default(),
@@ -66,30 +68,30 @@ impl Default for ConfigContracts{
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub enum ContractType{
+pub enum ContractType {
     Distributor,
     WarmupContract,
-    Locker
+    Locker,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub struct Contract{
-    pub address : HumanAddr,
-    pub code_hash : String
+pub struct Contract {
+    pub address: HumanAddr,
+    pub code_hash: String,
 }
 
-impl Default for Contract{
-    fn default() -> Self{
-        Self{
+impl Default for Contract {
+    fn default() -> Self {
+        Self {
             address: HumanAddr::default(),
-            code_hash: String::default()
+            code_hash: String::default(),
         }
     }
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, JsonSchema)]
-pub struct Epoch{
+pub struct Epoch {
     pub length: u64,
     pub number: u64,
     pub end_block: u64,
@@ -104,17 +106,16 @@ pub struct Claim {
     pub lock: bool, // prevents malicious delays
 }
 
-impl Default for Claim{
-    fn default() -> Self{
-        Self{
-            deposit:Uint128(0),
-            gons:U256::to_string(&U256::zero()),
-            expiry:0,
-            lock:false
+impl Default for Claim {
+    fn default() -> Self {
+        Self {
+            deposit: Uint128(0),
+            gons: U256::to_string(&U256::zero()),
+            expiry: 0,
+            lock: false,
         }
     }
 }
-
 
 pub struct ReadonlyConfig<'a, S: ReadonlyStorage> {
     storage: ReadonlyPrefixedStorage<'a, S>,
@@ -141,6 +142,10 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfig<'a, S> {
 
     pub fn total_supply(&self) -> u128 {
         self.as_readonly().total_supply()
+    }
+
+    pub fn currently_staking(&self) -> u128 {
+        self.as_readonly().currently_staking()
     }
 
     pub fn contract_status(&self) -> ContractStatusLevel {
@@ -219,6 +224,14 @@ impl<'a, S: Storage> Config<'a, S> {
         self.storage.set(KEY_TOTAL_SUPPLY, &supply.to_be_bytes());
     }
 
+    pub fn currently_staking(&self) -> u128 {
+        self.as_readonly().currently_staking()
+    }
+
+    pub fn is_currently_staking(&mut self, amount: u128) {
+        self.storage.set(KEY_CURRENTLY_STAKING, &amount.to_be_bytes());
+    }
+
     pub fn contract_status(&self) -> ContractStatusLevel {
         self.as_readonly().contract_status()
     }
@@ -230,7 +243,7 @@ impl<'a, S: Storage> Config<'a, S> {
     }
 
     pub fn set_warmup_info(&mut self, address: &CanonicalAddr, claim: Claim) -> StdResult<()> {
-        bucket(KEY_WARMUP_INFO, &mut self.storage).save(address.as_slice(),&claim)
+        bucket(KEY_WARMUP_INFO, &mut self.storage).save(address.as_slice(), &claim)
     }
 
     pub fn warmup_info(&self, address: &CanonicalAddr) -> Claim {
@@ -281,6 +294,14 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
         slice_to_u128(&supply_bytes).unwrap()
     }
 
+    fn currently_staking(&self) -> u128 {
+        let amount_bytes = self
+            .0
+            .get(KEY_CURRENTLY_STAKING)
+            .expect("you forgot to state if the contract was currently staking something");
+        slice_to_u128(&amount_bytes).unwrap()
+    }
+
     fn contract_status(&self) -> ContractStatusLevel {
         let supply_bytes = self
             .0
@@ -293,7 +314,9 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
     }
 
     fn warmup_info(&self, address: &CanonicalAddr) -> Claim {
-        bucket_read(KEY_WARMUP_INFO, self.0).load(address.as_slice()).unwrap_or_default()
+        bucket_read(KEY_WARMUP_INFO, self.0)
+            .load(address.as_slice())
+            .unwrap_or_default()
     }
 
     pub fn tx_count(&self) -> u64 {

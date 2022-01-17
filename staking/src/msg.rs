@@ -4,12 +4,11 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::batch;
+use crate::state::{Contract, ContractType};
 use crate::viewing_key::ViewingKey;
 use cosmwasm_std::{Binary, HumanAddr, StdError, StdResult, Uint128};
 use secret_toolkit::permit::Permit;
 use secret_toolkit::utils::{HandleCallback, Query};
-use crate::state::{Contract, ContractType};
-
 
 pub const RESPONSE_BLOCK_SIZE: usize = 256;
 
@@ -29,7 +28,6 @@ pub struct InitMsg {
     pub first_epoch_number: u64,
     pub first_epoch_block: u64,
 }
-
 
 /// This type represents optional configuration values which can be overridden.
 /// All values are optional and have defaults which are more private by default,
@@ -76,27 +74,20 @@ impl InitConfig {
     }
 }
 
-
-
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum ReceiveMsg {
-    Stake{
-        recipient: Option<HumanAddr>,
-    },
-    Unstake{
-        trigger:bool
-    },
-    ReturnLockBonus{},
+    Stake { recipient: Option<HumanAddr> },
+    Unstake { trigger: bool },
+    ReturnLockBonus {},
 }
-
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum HandleMsg {
     //Receive tokens (need for a register receive at the initialization)
-    Receive{
-        sender : HumanAddr,
+    Receive {
+        sender: HumanAddr,
         from: HumanAddr,
         amount: Uint128,
         msg: Binary,
@@ -248,19 +239,19 @@ pub enum HandleMsg {
         recipient: HumanAddr,
         padding: Option<String>,
     },
-    Forfeit{
+    Forfeit {
         padding: Option<String>,
     },
     ToggleDepositLock {
         padding: Option<String>,
-    } ,
-    GiveLockBonus { 
+    },
+    GiveLockBonus {
         amount: Uint128,
         padding: Option<String>,
     },
-    SetContract { 
+    SetContract {
         contract_type: ContractType,
-        contract: Contract, 
+        contract: Contract,
         padding: Option<String>,
     },
     SetWarmupPeriod {
@@ -353,34 +344,34 @@ pub enum HandleAnswer {
         status: ResponseStatus,
     },
 
-    Stake{
+    Stake {
         status: ResponseStatus,
     },
-    Rebase{
+    Rebase {
         status: ResponseStatus,
     },
-    Claim{
+    Claim {
         status: ResponseStatus,
     },
-    Forfeit{
+    Forfeit {
         status: ResponseStatus,
     },
-    ToggleDepositLock{
+    ToggleDepositLock {
         status: ResponseStatus,
     },
-    Unstake{
+    Unstake {
         status: ResponseStatus,
     },
-    GiveLockBonus{
+    GiveLockBonus {
         status: ResponseStatus,
     },
-    ReturnLockBonus{
+    ReturnLockBonus {
         status: ResponseStatus,
     },
-    SetContract{
+    SetContract {
         status: ResponseStatus,
     },
-    SetWarmupPeriod{
+    SetWarmupPeriod {
         status: ResponseStatus,
     },
 
@@ -404,6 +395,7 @@ pub enum QueryMsg {
     TokenInfo {},
     TokenConfig {},
     ContractStatus {},
+    Epoch {},
     ExchangeRate {},
     Allowance {
         owner: HumanAddr,
@@ -432,8 +424,8 @@ pub enum QueryMsg {
         query: QueryWithPermit,
     },
     //Staking Msgs
-    ContractBalance{},
-    Index{}
+    ContractBalance {},
+    Index {},
 }
 
 impl QueryMsg {
@@ -514,8 +506,8 @@ pub enum QueryAnswer {
     ContractBalance {
         amount: Uint128,
     },
-    Index{
-        index: String
+    Index {
+        index: String,
     },
 }
 
@@ -573,54 +565,42 @@ pub fn space_pad(block_size: usize, message: &mut Vec<u8>) -> &mut Vec<u8> {
 //Other contracts messages
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum SOhmHandleMsg{
-    Rebase
-    {
-        profit: Uint128,
-        epoch: u64,
-    },
+pub enum SOhmHandleMsg {
+    Rebase { profit: Uint128, epoch: u64 },
 }
 
-impl HandleCallback for SOhmHandleMsg{
+impl HandleCallback for SOhmHandleMsg {
     const BLOCK_SIZE: usize = RESPONSE_BLOCK_SIZE;
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum DistributorHandleMsg{
-    Distribute{}
+pub enum DistributorHandleMsg {
+    Distribute {},
 }
 
-impl HandleCallback for DistributorHandleMsg{
+impl HandleCallback for DistributorHandleMsg {
     const BLOCK_SIZE: usize = RESPONSE_BLOCK_SIZE;
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum WarmupContractHandleMsg{
-    Retrieve{
-        staker: HumanAddr,
-        amount: Uint128
-    }
+pub enum WarmupContractHandleMsg {
+    Retrieve { staker: HumanAddr, amount: Uint128 },
 }
 
-impl HandleCallback for WarmupContractHandleMsg{
+impl HandleCallback for WarmupContractHandleMsg {
     const BLOCK_SIZE: usize = RESPONSE_BLOCK_SIZE;
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum SOhmQueryMsg{
-    CirculatingSupply{
-
-    },
-    GonsForBalance{
-        amount: Uint128
-    },
-    BalanceForGons{
-        gons: String
-    },
-    Index{},
+pub enum SOhmQueryMsg {
+    CirculatingSupply {},
+    ChangesInRebase { profit: Uint128 },
+    GonsForBalance { amount: Uint128 },
+    BalanceForGons { gons: String },
+    Index {},
 }
 
 impl Query for SOhmQueryMsg {
@@ -628,42 +608,65 @@ impl Query for SOhmQueryMsg {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct CirculatingSupply{
-    pub circulating_supply: Uint128,
+#[serde(rename_all = "snake_case")]
+pub enum DistributorQueryMsg {
+    NextRewardFor { recipient: HumanAddr }
 }
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct CirculatingSupplyResponse{
-    pub circulating_supply: CirculatingSupply,
+
+impl Query for DistributorQueryMsg {
+    const BLOCK_SIZE: usize = RESPONSE_BLOCK_SIZE;
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct GonsForBalance{
+pub struct ChangesInRebase {
+    pub circulating_supply:Uint128,
+    pub total_supply_before:Uint128,
+    pub total_supply_after:Uint128
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct ChangesInRebaseResponse {
+    pub changes_in_rebase: ChangesInRebase,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct GonsForBalance {
     pub gons: String,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct GonsForBalanceResponse{
+pub struct GonsForBalanceResponse {
     pub gons_for_balance: GonsForBalance,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct BalanceForGons{
+pub struct BalanceForGons {
     pub amount: Uint128,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct BalanceForGonsResponse{
+pub struct BalanceForGonsResponse {
     pub balance_for_gons: BalanceForGons,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct Index{
+pub struct Index {
     pub index: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct IndexResponse{
+pub struct IndexResponse {
     pub index: Index,
 }
-    
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct NextRewardFor {
+    pub amount: Uint128,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct NextRewardForResponse {
+    pub next_reward_for: NextRewardFor,
+}
+
+
 
 #[cfg(test)]
 mod tests {

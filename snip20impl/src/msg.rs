@@ -350,7 +350,7 @@ pub enum QueryMsg {
     WithPermit {
         permit: Permit,
         query: QueryWithPermit,
-    },
+    }
 }
 
 impl QueryMsg {

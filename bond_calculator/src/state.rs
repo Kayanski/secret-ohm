@@ -15,6 +15,12 @@ pub const PREFIX_CONFIG: &[u8] = b"config";
 // Config
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, JsonSchema)]
+pub struct Contract{
+    pub address : HumanAddr,
+    pub code_hash : String
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct Constants {
     pub ohm: Contract,
 }

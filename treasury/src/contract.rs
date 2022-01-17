@@ -8,12 +8,12 @@ use cosmwasm_std::{
 
 use crate::msg::{
     space_pad, ContractStatusLevel, HandleAnswer, HandleMsg, InitMsg, QueryAnswer, QueryMsg,
-    ResponseStatus::Success, ReceiveAnswer, ReceiveMsg, contract_info_from_constants
+    ResponseStatus::Success, ReceiveAnswer, ReceiveMsg
 };
 use crate::rand::sha_256;
 use crate::state::{
      Config, Constants, Debtors, ReadonlyConfig, ReadonlyDebtors,
-    ManagingRole, Contract
+    ManagingRole, Contract, Deposited, ReadonlyDeposited
 };
 
 use secret_toolkit::snip20;
@@ -159,7 +159,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::Withdraw { token, amount,.. } => withdraw(deps, env, token, amount.u128()),
         HandleMsg::IncurDebt { token, amount, .. } => incur_debt(deps, env, token, amount.u128()),
         HandleMsg::Manage { token, amount, .. } => manage(deps, env, token, amount.u128()),
-        HandleMsg::MintRewards { token, amount, .. } => mint_rewards(deps, env, token, amount.u128()),
+        HandleMsg::MintRewards { recipient, amount, .. } => mint_rewards(deps, env, recipient, amount.u128()),
         HandleMsg::AuditReserves { .. } => audit_reserves(deps, env),
         HandleMsg::Queue { address, role } => queue(deps, env, address, role),
         HandleMsg::ToggleQueue { address, role } => toggle_queue(deps, env, address, role),
@@ -175,11 +175,12 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
 
 pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryMsg) -> QueryResult {
     match msg {
-        QueryMsg::ContractInfo {} => query_contract_info(&deps.storage),
+        QueryMsg::ContractInfo {} => query_contract_info(deps),
         QueryMsg::Contracts {role} => query_tokens(&deps.storage, role),
         QueryMsg::ManagingAddresses {role} => query_managing_addresses(deps, role),
         QueryMsg::ContractStatus {} => query_contract_status(&deps.storage),
         QueryMsg::ValueOf{ token, amount } => query_value_of(deps, token, amount),
+        QueryMsg::TotalBondDeposited{ token } => query_total_bond_deposited(deps, token),
     }
 }
 
@@ -206,7 +207,7 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
                 ));
     }
 
-    let value = config.value_of(&deps.querier,config.get_reserve_token_info(token)?,amount)?;
+    let value = config.value_of(&deps.querier,config.get_reserve_token_info(token.clone())?,amount)?;
 
     let send = if let Some(send_) = value.checked_sub(profit) {
         send_
@@ -234,6 +235,11 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
             "This mint attempt would increase the total reserves above the supported maximum",
         ));
     }
+    let mut deposited = Deposited::from_storage(&mut deps.storage);   
+    let token_address = deps.api.canonical_address(&token)?;
+
+    //Save a bond deposit (to have statistics)
+    deposited.add_new_bond(&token_address, amount)?;
 
     Ok(HandleResponse {
         messages : messages,
@@ -544,7 +550,7 @@ pub fn mint_rewards<S: Storage, A: Api, Q: Querier>(
     let sender = env.message.sender.clone();
     let config = Config::from_storage(&mut deps.storage);
     let canonical_sender = deps.api.canonical_address(&sender)?;
-    if !config.has_managing_position(&canonical_sender,ManagingRole::ReserveManager)
+    if !config.has_managing_position(&canonical_sender,ManagingRole::RewardManager)
     {
         return Err(StdError::generic_err(
                     "Address not approved",
@@ -759,9 +765,24 @@ pub fn toggle_token_queue<S: Storage, A: Api, Q: Querier>(
         data: Some(to_binary(&HandleAnswer::ToggleQueue { status: Success })?),
     })
 }
-fn query_contract_info<S: ReadonlyStorage>(storage: &S) -> QueryResult {
-    let config = ReadonlyConfig::from_storage(storage);
-    to_binary(&contract_info_from_constants(&config.constants()?))
+fn query_contract_info<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    ) -> QueryResult {
+    let config = ReadonlyConfig::from_storage(&deps.storage);
+    let constants = config.constants()?;
+    to_binary(&
+         QueryAnswer::ContractInfo{
+            name : constants.name.clone(),
+            admin : constants.admin.clone(),
+            prng_seed : constants.prng_seed.clone(),
+            ohm : constants.ohm.clone(),
+            sohm : constants.sohm.clone(),
+            blocks_needed_for_queue : constants.blocks_needed_for_queue.clone(),
+            total_reserves: Uint128(config.total_reserves()),
+            total_debt: Uint128(config.total_debt()),
+            excess_reserves: Uint128(config.excess_reserves(&deps.querier)?)
+        }
+    )
 }
 fn query_tokens<S: ReadonlyStorage>(storage: &S,role : ManagingRole) -> QueryResult {
     let config = ReadonlyConfig::from_storage(storage);
@@ -810,6 +831,20 @@ fn query_value_of<S: Storage, A: Api, Q: Querier>(
                 amount.u128()
             )?
         ),
+    })
+}
+
+fn query_total_bond_deposited<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    token: HumanAddr
+    ) -> QueryResult {
+    
+    let deposited = ReadonlyDeposited::from_storage(&deps.storage);   
+    let token_address = deps.api.canonical_address(&token)?;
+
+    to_binary(&QueryAnswer::TotalBondDeposited {
+            amount: Uint128(deposited.deposited(&token_address)),
+        
     })
 }
 
@@ -891,7 +926,7 @@ mod tests {
     use super::*;
     use crate::msg::ResponseStatus;
     use cosmwasm_std::testing::*;
-    use cosmwasm_std::{from_binary, BlockInfo, ContractInfo, MessageInfo, QueryResponse, WasmMsg};
+    use cosmwasm_std::{from_binary};
     use std::any::Any;
 
     // Helper functions

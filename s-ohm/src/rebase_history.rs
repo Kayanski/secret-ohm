@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{
-   ReadonlyStorage, StdResult, Storage,
+   ReadonlyStorage, StdResult, Storage, Uint128
 };
 use cosmwasm_storage::{PrefixedStorage, ReadonlyPrefixedStorage};
 
@@ -17,11 +17,11 @@ const PREFIX_REBASE: &[u8] = b"rebase";
 pub struct Rebase{
     id:u64,
     epoch: u64,
-    rebase: u128, // 18 decimals
-    total_staked_before: u128,
-    total_staked_after: u128,
-    amount_rebased: u128,
-    index: String,
+    rebase: Uint128, // 18 decimals
+    total_staked_before: Uint128,
+    total_staked_after: Uint128,
+    amount_rebased: Uint128,
+    index: Uint128,
     block_time: u64,
     block_height: u64
 }
@@ -40,18 +40,18 @@ pub fn store_rebase<S: Storage>(
     total_staked_before: u128,
     total_staked_after: u128,
     amount_rebased: u128,
-    index: String,
+    index: u128,
     block: &cosmwasm_std::BlockInfo,
 ) -> StdResult<()> {
     let id = increment_rebase_count(store)?;
     let rebase = Rebase{
         id,
         epoch,
-        rebase,
-        total_staked_before,
-        total_staked_after,
-        amount_rebased,
-        index,
+        rebase: Uint128(rebase),
+        total_staked_before: Uint128(total_staked_before),
+        total_staked_after: Uint128(total_staked_after),
+        amount_rebased: Uint128(amount_rebased),
+        index: Uint128(index),
         block_time: block.time,
         block_height: block.height
     };

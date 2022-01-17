@@ -325,6 +325,9 @@ pub enum QueryMsg {
         page_size: u32,
     },
     CirculatingSupply{},
+    ChangesInRebase{
+        profit:Uint128
+    },
     Index{},
     WithPermit {
         permit: Permit,
@@ -424,6 +427,11 @@ pub enum QueryAnswer {
     },
     CirculatingSupply {
         circulating_supply: Uint128,
+    },
+    ChangesInRebase{
+        circulating_supply:Uint128,
+        total_supply_before:Uint128,
+        total_supply_after:Uint128
     },
     Index{
         index: Uint128,

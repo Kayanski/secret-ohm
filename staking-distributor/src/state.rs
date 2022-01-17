@@ -49,6 +49,16 @@ pub struct Adjust {
     pub target: u128,
 }
 
+impl Default for Adjust{
+    fn default() -> Self{
+        return Self{
+            add:false,
+            rate:0,
+            target:0
+        }
+    }
+}
+
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]

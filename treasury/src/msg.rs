@@ -4,7 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{Binary, HumanAddr, StdError, StdResult, Uint128};
-use crate::state::{Contract, ManagingRole, Constants};
+use crate::state::{Contract, ManagingRole};
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct InitialBalance {
@@ -58,7 +58,7 @@ pub enum HandleMsg {
         amount : Uint128
     },
     MintRewards{
-        token : HumanAddr,
+        recipient : HumanAddr,
         amount : Uint128
     },
     AuditReserves{
@@ -159,7 +159,10 @@ pub enum QueryMsg {
     ValueOf{
         token: HumanAddr,
         amount: Uint128
-    },
+    },  
+    TotalBondDeposited {
+       token: HumanAddr
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
@@ -172,6 +175,9 @@ pub enum QueryAnswer {
         ohm : Contract,
         sohm : Contract,
         blocks_needed_for_queue : u64,
+        total_reserves: Uint128,
+        total_debt: Uint128,
+        excess_reserves: Uint128,
     },
     TokensInfo{
         tokens : Vec<Contract>
@@ -184,16 +190,9 @@ pub enum QueryAnswer {
     },
     ValueOf{
         value: Uint128,
-    }
-}
-pub fn contract_info_from_constants(constants : &Constants) -> QueryAnswer{
-    QueryAnswer::ContractInfo{
-        name : constants.name.clone(),
-        admin : constants.admin.clone(),
-        prng_seed : constants.prng_seed.clone(),
-        ohm : constants.ohm.clone(),
-        sohm : constants.sohm.clone(),
-        blocks_needed_for_queue : constants.blocks_needed_for_queue.clone(),
+    },
+    TotalBondDeposited {
+        amount:Uint128
     }
 }
 

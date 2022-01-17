@@ -28,7 +28,7 @@ pub const KEY_LIQUIDITY_TOKENS: &[u8] = b"liquidity_tokens";
 pub const KEY_BOND_CALCULATOR: &[u8] = b"bond_calculator";
 
 pub const PREFIX_CONFIG: &[u8] = b"config";
-pub const PREFIX_BALANCES: &[u8] = b"balances";
+pub const PREFIX_DEPOSITED: &[u8] = b"deposited";
 pub const PREFIX_DEBTORS: &[u8] = b"debtors";
 pub const PREFIX_ALLOWANCES: &[u8] = b"allowances";
 pub const PREFIX_VIEW_KEY: &[u8] = b"viewingkey";
@@ -462,13 +462,17 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
         )?; 
         let total_ohm_supply = ohm_token_info.total_supply.unwrap_or_default().u128();
         Ok(self.total_reserves() - (total_ohm_supply - self.total_debt()))
+
+
+        //total_supply :        60_000_000_000_000 
+        //total_reserves :  14_000_000_000_000_000
     }
 
     fn total_debt(&self) -> u128 {
         let debt_bytes = self
             .0
             .get(KEY_TOTAL_DEBT)
-            .expect("no total debt stored in config");
+            .unwrap_or(0_u128.to_be_bytes().to_vec());
         // This unwrap is ok because we know we stored things correctly
         slice_to_u128(&debt_bytes).unwrap_or_default()
     }
@@ -550,66 +554,71 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
     }
 }
 
-// Balances
+// Total Deposited
 
-pub struct ReadonlyBalances<'a, S: ReadonlyStorage> {
+pub struct ReadonlyDeposited<'a, S: ReadonlyStorage> {
     storage: ReadonlyPrefixedStorage<'a, S>,
 }
 
-impl<'a, S: ReadonlyStorage> ReadonlyBalances<'a, S> {
+impl<'a, S: ReadonlyStorage> ReadonlyDeposited<'a, S> {
     pub fn from_storage(storage: &'a S) -> Self {
         Self {
-            storage: ReadonlyPrefixedStorage::new(PREFIX_BALANCES, storage),
+            storage: ReadonlyPrefixedStorage::new(PREFIX_DEPOSITED, storage),
         }
     }
 
-    fn as_readonly(&self) -> ReadonlyBalancesImpl<ReadonlyPrefixedStorage<S>> {
-        ReadonlyBalancesImpl(&self.storage)
+    fn as_readonly(&self) -> ReadonlyDepositedImpl<ReadonlyPrefixedStorage<S>> {
+        ReadonlyDepositedImpl(&self.storage)
     }
 
-    pub fn account_amount(&self, account: &CanonicalAddr) -> u128 {
-        self.as_readonly().account_amount(account)
+    pub fn deposited(&self, account: &CanonicalAddr) -> u128 {
+        self.as_readonly().deposited(account)
     }
 }
 
-pub struct Balances<'a, S: Storage> {
+pub struct Deposited<'a, S: Storage> {
     storage: PrefixedStorage<'a, S>,
 }
 
-impl<'a, S: Storage> Balances<'a, S> {
+impl<'a, S: Storage> Deposited<'a, S> {
     pub fn from_storage(storage: &'a mut S) -> Self {
         Self {
-            storage: PrefixedStorage::new(PREFIX_BALANCES, storage),
+            storage: PrefixedStorage::new(PREFIX_DEPOSITED, storage),
         }
     }
 
-    fn as_readonly(&self) -> ReadonlyBalancesImpl<PrefixedStorage<S>> {
-        ReadonlyBalancesImpl(&self.storage)
+    fn as_readonly(&self) -> ReadonlyDepositedImpl<PrefixedStorage<S>> {
+        ReadonlyDepositedImpl(&self.storage)
     }
 
-    pub fn balance(&self, account: &CanonicalAddr) -> u128 {
-        self.as_readonly().account_amount(account)
+    pub fn deposited(&self, account: &CanonicalAddr) -> u128 {
+        self.as_readonly().deposited(account)
     }
 
-    pub fn set_account_balance(&mut self, account: &CanonicalAddr, amount: u128) {
-        self.storage.set(account.as_slice(), &amount.to_be_bytes())
+    pub fn add_new_bond(&mut self, account: &CanonicalAddr, amount: u128) -> StdResult<()>{
+
+        let mut bond_deposited = self.deposited(account);
+        bond_deposited = bond_deposited.checked_add(amount).ok_or_else(|| {
+            StdError::generic_err("This tx is not possible, too much bonds were done")
+        })?;
+        Ok(self.storage.set(account.as_slice(), &bond_deposited.to_be_bytes()))
     }
 }
 
-/// This struct refactors out the readonly methods that we need for `Balances` and `ReadonlyBalances`
+/// This struct refactors out the readonly methods that we need for `Deposited` and `ReadonlyDeposited`
 /// in a way that is generic over their mutability.
 ///
 /// This was the only way to prevent code duplication of these methods because of the way
 /// that `ReadonlyPrefixedStorage` and `PrefixedStorage` are implemented in `cosmwasm-std`
-struct ReadonlyBalancesImpl<'a, S: ReadonlyStorage>(&'a S);
+struct ReadonlyDepositedImpl<'a, S: ReadonlyStorage>(&'a S);
 
-impl<'a, S: ReadonlyStorage> ReadonlyBalancesImpl<'a, S> {
-    pub fn account_amount(&self, account: &CanonicalAddr) -> u128 {
+impl<'a, S: ReadonlyStorage> ReadonlyDepositedImpl<'a, S> {
+    pub fn deposited(&self, account: &CanonicalAddr) -> u128 {
         let account_bytes = account.as_slice();
         let result = self.0.get(account_bytes);
         match result {
             // This unwrap is ok because we know we stored things correctly
-            Some(balance_bytes) => slice_to_u128(&balance_bytes).unwrap(),
+            Some(deposited_bytes) => slice_to_u128(&deposited_bytes).unwrap(),
             None => 0,
         }
     }

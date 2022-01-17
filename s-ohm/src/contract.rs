@@ -176,34 +176,54 @@ pub fn circulating_supply<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-fn query_index<S: Storage, A: Api, Q: Querier>(
+fn index<S: Storage, A: Api, Q: Querier>(
     deps: & Extern<S, A, Q>
-) -> QueryResult {
+) -> StdResult<u128> {
     let consts = ReadonlyConfig::from_storage(&deps.storage).constants()?;
     let gons_per_fragment = U256::from_dec_str(&consts.gons_per_fragment).unwrap();
     let index_gons = U256::from_dec_str(&consts.index).unwrap();
+    balance_for_gons(gons_per_fragment, index_gons)
+}
+
+fn query_index<S: Storage, A: Api, Q: Querier>(
+    deps: & Extern<S, A, Q>
+) -> QueryResult {
 
     to_binary(&QueryAnswer::Index {
-        index: Uint128(balance_for_gons(gons_per_fragment, index_gons)?)
+        index: Uint128(index(deps)?)
     })
 }
 
-pub fn rebase<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
+pub fn query_changes_in_rebase<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
     profit: u128,
-    epoch: u64
-) -> StdResult<HandleResponse> {
+) -> QueryResult {
     let config = ReadonlyConfig::from_storage(&deps.storage);
-    let mut total_supply = config.total_supply();
+    let old_total_supply = config.total_supply();
+
+    let new_total_supply = simulate_rebase(deps,profit)?;
+    let current_circulating_supply = circulating_supply(deps)?;
+
+    to_binary(&QueryAnswer::ChangesInRebase {
+        total_supply_before:Uint128(old_total_supply),
+        total_supply_after:Uint128(new_total_supply),
+        circulating_supply: Uint128(current_circulating_supply)
+    })
+}
+
+
+// Simulates the state of the total_supply, and circulating_supply variables after a rebase
+pub fn simulate_rebase<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    profit: u128,
+) -> StdResult<u128> {
+
+    let config = ReadonlyConfig::from_storage(&deps.storage);
+    let total_supply = config.total_supply();
     let rebase_amount;
-    let current_circulating_supply: u128 = circulating_supply(&deps)?;
+    let current_circulating_supply: u128 = circulating_supply(deps)?;
     if profit == 0{
-        return Ok(HandleResponse {
-            messages: vec![],
-            log: vec![],
-            data: Some(to_binary(&HandleAnswer::Rebase { status: Success })?),
-        });
+        return Ok(total_supply);
     }else if current_circulating_supply > 0{
         rebase_amount = profit * total_supply / current_circulating_supply;
     }else{
@@ -211,12 +231,32 @@ pub fn rebase<S: Storage, A: Api, Q: Querier>(
     }
 
     if let Some(new_total_supply) = total_supply.checked_add(rebase_amount) {
-        total_supply = new_total_supply;
+        Ok(new_total_supply)
     } else {
-        total_supply = MAX_SUPPLY;
+        Ok(MAX_SUPPLY)
+    }
+}
+
+
+pub fn rebase<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    profit: u128,
+    epoch: u64
+) -> StdResult<HandleResponse> {
+   
+    // We start by simulating the rebase (the actual computation)
+    let total_supply = simulate_rebase(deps,profit)?;
+    if total_supply == ReadonlyConfig::from_storage(&deps.storage).total_supply(){
+        return Ok(HandleResponse {
+                messages: vec![],
+                log: vec![],
+                data: Some(to_binary(&HandleAnswer::Rebase { status: Success })?),
+            });
     }
 
-    //Now we can start modifying config (after all the computations are made)
+    // Now we can start modifying config (after all the computations are made)
+    let current_circulating_supply: u128 = circulating_supply(&deps)?;
     let mut config = Config::from_storage(&mut deps.storage);
     check_if_staking_contract(&config,&env.message.sender)?;
 
@@ -237,7 +277,7 @@ pub fn rebase<S: Storage, A: Api, Q: Querier>(
         )
     )?.checked_div(current_circulating_supply).unwrap_or_else(|| 0);
 
-    let index = config.constants()?.index.clone();
+    let new_index = index(deps)?;
     let new_circulating_supply = circulating_supply(&deps)?;
 
     store_rebase(
@@ -247,7 +287,7 @@ pub fn rebase<S: Storage, A: Api, Q: Querier>(
         current_circulating_supply,
         new_circulating_supply,
         profit,
-        index,
+        new_index,
         &env.block
     )?;
     Ok(HandleResponse {
@@ -406,6 +446,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryM
         QueryMsg::ExchangeRate {} => query_exchange_rate(&deps.storage),
 
         QueryMsg::CirculatingSupply {} => query_circulating_supply(deps),
+        QueryMsg::ChangesInRebase {profit} => query_changes_in_rebase(deps,profit.u128()),
         QueryMsg::Index {} => query_index(deps),
         QueryMsg::RebaseHistory {page, page_size} => query_rebases(deps, page.unwrap_or(0), page_size),
 
@@ -1288,7 +1329,7 @@ fn perform_transfer<T: Storage>(
     } else {
         return Err(StdError::generic_err(format!(
             "insufficient funds: balance={}, required={}",
-            from_balance, amount
+            from_balance, gon_value
         )));
     }
     gon_balances.set_account_gon_balance(from, from_balance);

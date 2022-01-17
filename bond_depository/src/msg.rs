@@ -81,6 +81,14 @@ pub enum HandleMsg {
     RevokePermit {
         permit_name: String,
         padding: Option<String>,
+    },  
+    CreateViewingKey {
+        entropy: String,
+        padding: Option<String>,
+    },
+    SetViewingKey {
+        key: String,
+        padding: Option<String>,
     },
 }
 
@@ -192,6 +200,7 @@ pub enum QueryMsg {
         permit: Permit,
         query: QueryWithPermit,
     },
+    BondTerms{},
 }
 
 impl QueryMsg {

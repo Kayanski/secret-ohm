@@ -106,6 +106,10 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         // Other
         HandleMsg::ChangeAdmin { address, .. } => change_admin(deps, env, address),
         HandleMsg::RevokePermit { permit_name, .. } => revoke_permit(deps, env, permit_name),
+
+        //ViewingKeys
+        HandleMsg::CreateViewingKey { entropy, .. } => try_create_key(deps, env, entropy),
+        HandleMsg::SetViewingKey { key, .. } => try_set_key(deps, env, key),
     };
 
     pad_response(response)
@@ -123,6 +127,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryM
         QueryMsg::StandardizedDebtRatio{block_height} => query_standardized_debt_ratio(deps,block_height),
         QueryMsg::CurrentDebt{block_height} => query_current_debt(deps,block_height),
         QueryMsg::DebtDecay{block_height} => query_debt_decay(deps,block_height),
+        QueryMsg::BondTerms{} => query_bond_terms(deps),
 
         QueryMsg::WithPermit { permit, query } => permit_queries(deps, permit, query),
         _ => viewing_keys_queries(deps, msg),
@@ -830,6 +835,13 @@ fn query_debt_decay<S: Storage, A: Api, Q: Querier>(
     to_binary(&QueryAnswer::DebtDecay {
         decay: Uint128(debt_decay(deps,block_height)?),
     })
+}
+
+fn query_bond_terms<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>
+) -> QueryResult {
+    let config = ReadonlyConfig::from_storage(&deps.storage);
+    to_binary(&config.constants()?.terms)
 }
 
 pub fn percent_vested_for<S: Storage, A: Api, Q: Querier>(

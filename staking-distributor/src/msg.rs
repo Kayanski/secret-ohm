@@ -4,9 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::state::Contract;
-use crate::viewing_key::ViewingKey;
 use cosmwasm_std::{Binary, HumanAddr, StdError, StdResult, Uint128};
-use secret_toolkit::permit::Permit;
 
 use secret_toolkit::utils::{HandleCallback};
 
@@ -44,11 +42,7 @@ pub enum HandleMsg {
     ChangeAdmin {
         address: HumanAddr,
         padding: Option<String>,
-    },
-    RevokePermit {
-        permit_name: String,
-        padding: Option<String>,
-    },
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
@@ -67,15 +61,6 @@ pub enum HandleAnswer {
         status: ResponseStatus,
     },
     
-    CreateViewingKey {
-        key: ViewingKey,
-    },
-
-    // Other
-    SetViewingKey {
-        status: ResponseStatus,
-    },
-
     // Other
     ChangeAdmin {
         status: ResponseStatus,
@@ -96,34 +81,13 @@ pub enum QueryMsg {
     ContractInfo {},
     RateInfo{
         address: HumanAddr,
-        key: String,
     },
     NextRewardAt { 
         rate: Uint128,
     },
     NextRewardFor{
         recipient: HumanAddr,
-    },
-    WithPermit {
-        permit: Permit,
-        query: QueryWithPermit,
-    },
-}
-
-impl QueryMsg {
-    pub fn get_validation_params(&self) -> (Vec<&HumanAddr>, ViewingKey) {
-        match self {
-            Self::RateInfo { address, key } => (vec![address], ViewingKey(key.clone())),
-            _ => panic!("This query type does not require authentication"),
-        }
     }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum QueryWithPermit {
-    RateInfo {},
-    NextRewardFor{},
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
@@ -151,10 +115,6 @@ pub enum QueryAnswer {
     },
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
-pub struct CreateViewingKeyResponse {
-    pub key: String,
-}
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
 #[serde(rename_all = "snake_case")]

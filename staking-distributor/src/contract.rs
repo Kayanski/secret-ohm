@@ -2,12 +2,11 @@
 /// https://github.com/SecretFoundation/SNIPs/blob/master/SNIP-20.md
 use std::convert::TryInto;
 use cosmwasm_std::{
-    to_binary, Api, Binary, Env, Extern,
+    to_binary, Api, Env, Extern,
     HandleResponse, HumanAddr, InitResponse, Querier, QueryResult, ReadonlyStorage, StdError,
     StdResult, Storage, Uint128,
 };
 
-use crate::msg::QueryWithPermit;
 use crate::msg::{
     space_pad, HandleAnswer, HandleMsg, InitMsg, QueryAnswer, QueryMsg,
     ResponseStatus::Success, ResponseStatus::Failure, TreasuryHandleMsg, 
@@ -15,13 +14,10 @@ use crate::msg::{
 };
 use crate::rand::sha_256;
 use crate::state::{
-    read_viewing_key, 
-    write_viewing_key, Config, Constants, ReadonlyConfig,
+    Config, Constants, ReadonlyConfig,
     Info, Adjust,
 };
 use secret_toolkit::snip20;
-use crate::viewing_key::{ViewingKey, VIEWING_KEY_SIZE};
-use secret_toolkit::permit::{validate, Permission, Permit, RevokedPermits};
 use secret_toolkit::utils::{HandleCallback};
 
 pub const PREFIX_REVOKED_PERMITS: &str = "revoked_permits";
@@ -75,7 +71,6 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
 
         // Other
         HandleMsg::ChangeAdmin { address, .. } => change_admin(deps, env, address),
-        HandleMsg::RevokePermit { permit_name, .. } => revoke_permit(deps, env, permit_name),
     };
 
     pad_response(response)
@@ -126,17 +121,19 @@ pub fn adjust<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<()>{
     let mut config = Config::from_storage(&mut deps.storage);
     let mut info = config.rate_info();
-    let mut adjustment = config.adjustment(index)?;
+    let mut adjustment = config.adjustment(index).unwrap_or_default();
     if adjustment.rate != 0{
         if adjustment.add{
             info[index].rate += adjustment.rate;
             if info[index].rate >= adjustment.target{
                 adjustment.rate = 0;
+                info[index].rate = adjustment.target;
             }
         }else{
             info[index].rate -= adjustment.rate;
             if info[index].rate <= adjustment.target{
                 adjustment.rate = 0;
+                info[index].rate = adjustment.target;
             }
         }
         config.set_adjustment(index,adjustment)?;
@@ -207,8 +204,8 @@ pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryM
     match msg {
         QueryMsg::ContractInfo {} => query_contract_info(&deps.storage),
         QueryMsg::NextRewardAt {rate} => query_next_reward_at(deps,rate.u128()),
-        QueryMsg::WithPermit { permit, query } => permit_queries(deps, permit, query),
-        _ => viewing_keys_queries(deps, msg),
+        QueryMsg::RateInfo { address } => query_rate_info(&deps.storage, address),
+        QueryMsg::NextRewardFor { recipient } => query_next_reward_for(deps, recipient)
     }
 }
 
@@ -233,74 +230,6 @@ fn next_reward_for<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, recip
     let config = ReadonlyConfig::from_storage(&deps.storage);
     next_reward_at(deps,config.info_by_recipient(recipient)?.rate)
 }
-
-
-fn permit_queries<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    permit: Permit,
-    query: QueryWithPermit,
-) -> Result<Binary, StdError> {
-    // Validate permit content
-    let contract_address = ReadonlyConfig::from_storage(&deps.storage)
-        .constants()?
-        .contract_address;
-
-    let account = validate(deps, PREFIX_REVOKED_PERMITS, &permit, contract_address)?;
-
-    // Permit validated! We can now execute the query.
-    match query {
-        QueryWithPermit::RateInfo {} => {
-            if !permit.check_permission(&Permission::Balance) {
-                return Err(StdError::generic_err(format!(
-                    "No permission to query rate, got permissions {:?}",
-                    permit.params.permissions
-                )));
-            }
-
-            query_rate_info(&deps.storage, account)
-        }
-        QueryWithPermit::NextRewardFor {} => {
-            if !permit.check_permission(&Permission::Balance) {
-                return Err(StdError::generic_err(format!(
-                    "No permission to query rate, got permissions {:?}",
-                    permit.params.permissions
-                )));
-            }
-
-            query_next_reward_for(deps, account)
-        }
-    }
-}
-
-pub fn viewing_keys_queries<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    msg: QueryMsg,
-) -> QueryResult {
-    let (addresses, key) = msg.get_validation_params();
-
-    for address in addresses {
-        let canonical_addr = deps.api.canonical_address(address)?;
-
-        let expected_key = read_viewing_key(&deps.storage, &canonical_addr);
-
-        if expected_key.is_none() {
-            // Checking the key will take significant time. We don't want to exit immediately if it isn't set
-            // in a way which will allow to time the command and determine if a viewing key doesn't exist
-            key.check_viewing_key(&[0u8; VIEWING_KEY_SIZE]);
-        } else if key.check_viewing_key(expected_key.unwrap().as_slice()) {
-            return match msg {
-                QueryMsg::RateInfo { address, .. } => query_rate_info(&deps.storage, address),
-                QueryMsg::NextRewardFor { recipient, .. } => query_next_reward_for(deps, recipient),
-                _ => panic!("This query type does not require authentication"),
-            };
-        }
-    }
-
-    to_binary(&QueryAnswer::ViewingKeyError {
-        msg: "Wrong viewing key for this address or viewing key not set".to_string(),
-    })
-}
-
 
 fn query_contract_info<S: ReadonlyStorage>(storage: &S) -> QueryResult {
     let config = ReadonlyConfig::from_storage(storage);
@@ -357,62 +286,6 @@ fn change_admin<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-pub fn try_set_key<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    key: String,
-) -> StdResult<HandleResponse> {
-    let vk = ViewingKey(key);
-
-    let message_sender = deps.api.canonical_address(&env.message.sender)?;
-    write_viewing_key(&mut deps.storage, &message_sender, &vk);
-
-    Ok(HandleResponse {
-        messages: vec![],
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::SetViewingKey { status: Success })?),
-    })
-}
-
-pub fn try_create_key<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    entropy: String,
-) -> StdResult<HandleResponse> {
-    let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
-    let prng_seed = constants.prng_seed;
-
-    let key = ViewingKey::new(&env, &prng_seed, (&entropy).as_ref());
-
-    let message_sender = deps.api.canonical_address(&env.message.sender)?;
-    write_viewing_key(&mut deps.storage, &message_sender, &key);
-
-    Ok(HandleResponse {
-        messages: vec![],
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::CreateViewingKey { key })?),
-    })
-}
-
-fn revoke_permit<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    permit_name: String,
-) -> StdResult<HandleResponse> {
-    RevokedPermits::revoke_permit(
-        &mut deps.storage,
-        PREFIX_REVOKED_PERMITS,
-        &env.message.sender,
-        &permit_name,
-    );
-
-    Ok(HandleResponse {
-        messages: vec![],
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::RevokePermit { status: Success })?),
-    })
-}
-
 fn is_admin<S: Storage>(config: &Config<S>, account: &HumanAddr) -> StdResult<bool> {
     let consts = config.constants()?;
     if &consts.admin != account {
@@ -439,7 +312,7 @@ mod tests {
     use super::*;
     use crate::msg::ResponseStatus;
     use cosmwasm_std::testing::*;
-    use cosmwasm_std::{from_binary, BlockInfo, ContractInfo, MessageInfo, QueryResponse, WasmMsg};
+    use cosmwasm_std::{from_binary, QueryResponse, Binary};
     use crate::state::{Contract};
     use std::any::Any;
 
@@ -491,10 +364,8 @@ mod tests {
             | HandleAnswer::AddRecipient{ status }
             | HandleAnswer::RemoveRecipient{ status }
             | HandleAnswer::SetAdjustment{ status }
-            | HandleAnswer::SetViewingKey { status }
             | HandleAnswer::ChangeAdmin { status }
-            | HandleAnswer::SetContractStatus { status }
-            | HandleAnswer::RevokePermit { status } => {
+            | HandleAnswer::SetContractStatus { status } => {
                 matches!(status, ResponseStatus::Success { .. })
             },
             _ => panic!(
