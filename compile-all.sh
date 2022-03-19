@@ -8,6 +8,9 @@ cd ../
 cd snip20impl/
 ./compile.sh
 cd ../
+cd snip20impl-testnet/
+./compile.sh
+cd ../
 cd s-ohm/
 ./compile.sh
 cd ../
@@ -18,6 +21,9 @@ cd staking-distributor/
 ./compile.sh
 cd ../
 cd staking-warmup/
+./compile.sh
+cd ../
+cd staking-helper/
 ./compile.sh
 cd ../
 cd treasury/

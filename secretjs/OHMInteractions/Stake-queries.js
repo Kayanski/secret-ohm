@@ -4,9 +4,19 @@ const {
 
 const fs = require("fs");
 
-require('dotenv').config();
+const initialIndex = 7675210820;
+
+var arguments = process.argv;
+
+if(arguments[2] == "staging"){
+  require('dotenv').config({ path: '.env.testnet' });
+}else{
+  require('dotenv').config();;
+}
+
 
 const COMMON_VIEWING_KEY = "ALL_ORGANISATION_INFO_SHOULD_BE_PUBLIC";
+let contracts = require("../contract_data.json");
 
 //Fees
 const customFees = {
@@ -34,9 +44,12 @@ function jsonToBase64(json){
 function base64ToJson(base64String){
   return JSON.parse(Buffer.from(base64String,'base64').toString('utf8'));
 }
+function base64ToText(base64String){
+  return Buffer.from(base64String,'base64').toString('utf8');
+}
 
 
-async function get_address(){
+async function getUserAddress(){
   // Use key created in tutorial #2
   const mnemonic = process.env.MNEMONIC;
 
@@ -78,6 +91,15 @@ async function get_client(){
       txEncryptionSeed, customFees
   );
   return client
+}
+
+
+function getContractFromName(contractName) {
+  if (contractName in contracts) {
+    return contracts[contractName][1];
+  } else {
+    console.log("Contract not found : ", contractName, contracts);
+  }
 }
 
 // General Queries
@@ -148,31 +170,27 @@ async function getRebaseAmount(client,contracts) {
   return epoch.distribute/circulating_supply.circulating_supply.circulating_supply;
 }
 
-const getRebaseHistory = async(client,tokenContract, page_size, page=null) => {
+const getRebaseHistory = async(client, page_size, page=null) => {
+  let tokenContract = getContractFromName("sOHM").contractAddress;
   queryMsg = {
     rebase_history:{page_size:page_size, page:page},
   };
-  let response = await client.queryContractSmart(tokenContract.contractAddress,queryMsg);
+  console.log(queryMsg);
+  let response = await client.queryContractSmart(tokenContract,queryMsg);
+  console.log(response);
   return response;
 }
 
-const getCurrentIndex = async(client,tokenContract) => {
-  const index = await getIndex(client, tokenContract);
-  const rebase_history = await getRebaseHistory(client, tokenContract, 0);
-  last_rebase_id = rebase_history.rebase_history.total;
-  let response = (await getRebaseHistory(client, tokenContract, 1, last_rebase_id-1))
-  console.log(response);
-  let first_rebase = response.rebase_history.rebases[0];
-  console.log(first_rebase);
-  if (first_rebase.id == 1){
-    return parseInt(index)/parseInt(first_rebase.index);
-  }
-  return null;
+const getCurrentIndex = async(client) => {
+  let tokenContract = getContractFromName("staking").contractAddress;
+  const index = await getIndex(client);
+  return index/initialIndex;
 }
 
 
-const getIndex = async(client,tokenContract) => {
-  let response = await client.queryContractSmart(tokenContract.contractAddress, { "index": {}});
+const getIndex = async(client) => {
+  let tokenContract = getContractFromName("staking").contractAddress;
+  let response = await client.queryContractSmart(tokenContract, { "index": {}});
   return response.index.index;
 }
 
@@ -303,16 +321,42 @@ async function maxYouCanBuy(client, bondAddress){
   return response.terms;
 }
 
+async function getContractBalance(client){
+  let stakingContract = getContractFromName("staking");
 
+  let queryMsg = {
+    contract_balance: {}
+  };
 
+  let response = await client.queryContractSmart(
+    stakingContract.contractAddress,
+    queryMsg
+  );
+  return response;
+}
 
+async function getTransactionHistory(client, tokenName, page, page_size, apiKey){
+  let tokenAddress = getContractFromName(tokenName).contractAddress;
+  let queryMsg = { transaction_history: {
+        address: await getUserAddress(),
+        key: apiKey,
+        page: page,
+        page_size: page_size
+  }};
+
+  let response = await client.queryContractSmart(
+    tokenAddress,
+    queryMsg
+  );
+  return response.transaction_history;
+}
   
 const main = async () => {
 
 
   // Create connection to DataHub Secret Network node
   const client = await get_client();
-  const accAddress = await get_address();
+  const accAddress = await getUserAddress();
 
   let rawdata = fs.readFileSync('contract_data.json');
   let contracts = JSON.parse(rawdata);
@@ -334,12 +378,17 @@ const main = async () => {
   //console.log(apiKey,balance);
 
   
-  array = [123, 34, 99, 105, 114, 99, 117, 108, 97, 116, 105, 110, 103, 95, 115, 117, 112, 112, 108, 121, 34, 58, 123, 34, 99, 105, 114, 99, 117, 108, 97, 116, 105, 110, 103, 95, 115, 117, 112, 112, 108, 121, 34, 58, 34, 48, 34, 125, 125];
+  array = [45, 0, 0, 0, 0, 0, 0, 0, 115, 101, 99, 114, 101, 116, 49, 107, 119, 122, 102, 109, 115, 51, 114, 104, 104, 112, 109, 52, 118, 121, 97, 122, 118, 102, 112, 121, 108, 113, 110, 118, 119, 100, 113, 108, 52, 106, 116, 108, 53, 54, 102, 55, 115, 64, 0, 0, 0, 0, 0, 0, 0, 51, 99, 55, 53, 49, 56, 102, 100, 98, 100, 49, 55, 55, 53, 101, 100, 48, 101, 50, 48, 101, 100, 100, 102, 51, 50, 48, 57, 55, 55, 50, 100, 99, 97, 52, 53, 54, 102, 56, 52, 100, 51, 98, 100, 53, 102, 97, 53, 100, 97, 102, 99, 53, 51, 49, 102, 53, 99, 56, 56, 102, 55, 50, 48, 45, 0, 0, 0, 0, 0, 0, 0, 115, 101, 99, 114, 101, 116, 49, 110, 52, 48, 116, 116, 100, 100, 103, 107, 54, 115, 108, 120, 56, 54, 117, 112, 112, 121, 122, 53, 57, 119, 100, 110, 112, 52, 118, 48, 50, 54, 121, 101, 51, 120, 107, 48, 53, 64, 0, 0, 0, 0, 0, 0, 0, 53, 100, 99, 54, 98, 48, 53, 57, 97, 100, 55, 98, 48, 55, 52, 55, 98, 97, 102, 100, 51, 53, 55, 50, 55, 99, 50, 48, 98, 100, 50, 53, 56, 54, 101, 52, 49, 53, 102, 54, 97, 53, 100, 48, 98, 99, 51, 51, 54, 56, 48, 99, 102, 102, 48, 56, 57, 55, 51, 54, 101, 101, 57, 54];
   console.log(new Buffer.from(array).toString());
+  
+  let msg = "eyJzZW5kIjp7InJlY2lwaWVudCI6InNlY3JldDFzNWwwZDc3ZTdnMDdtcGZzOXAyc3hkMmV4MzA5amh2anRlZXZteSIsImFtb3VudCI6IjEwMDAwMDAwMDAwMDAiLCJtc2ciOiJleUp6ZEdGclpTSTZleUp5WldOcGNHbGxiblFpT2lKelpXTnlaWFF4Y3pWc01HUTNOMlUzWnpBM2JYQm1jemx3TW5ONFpESmxlRE13T1dwb2RtcDBaV1YyYlhraWZYMD0iLCJwYWRkaW5nIjpudWxsfX0gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIA==";
+  console.log(base64ToText(msg));
+  
+  
 
-  let msg = "eyJjaGFuZ2VzX2luX3JlYmFzZSI6eyJjaXJjdWxhdGluZ19zdXBwbHkiOiIwIiwidG90YWxfc3VwcGx5X2JlZm9yZSI6IjUwMDAwMDAwMDAwMDAwMDAiLCJ0b3RhbF9zdXBwbHlfYWZ0ZXIiOiI1MDAxODAwMDAwMDAwMDAwIn19";
-  console.log(base64ToJson(msg));
- 
+  response = await getContractBalance(client);
+  console.log(response);
+
   response = await getBalance(client, OHMcontract.contractAddress, Stakingcontract.contractAddress,COMMON_VIEWING_KEY);
   console.log(response);
 
@@ -375,6 +424,8 @@ const main = async () => {
   response = await client.queryContractSmart(contracts["sOHM"][1].contractAddress, { "circulating_supply": {}});
   console.log("After Rebase : ", response);
   
+  response = await getCurrentIndex(client);
+  console.log("Index", response)
 
   let stakingBalance = await getBalance(client, 
     contracts["OHM"][1].contractAddress,
@@ -387,11 +438,20 @@ const main = async () => {
 
   let epoch = await getEpoch(client,contracts);
   console.log("Epoch : ", epoch);
-
+  /*
+  let AddressBalance = await getBalance(client, 
+    contracts["sOHM"][1].contractAddress,
+    accAddress,"api_key_orrtbgKDkAmzRRpXPf/5dNrb8HF7xn8uLPPDKXKvCNo=");  
+    */
   let AddressBalance = await getBalance(client, 
     contracts["sOHM"][1].contractAddress,
     accAddress);  
-  console.log("Warmup balance : ", AddressBalance);
+  console.log("sOHM balance : ", AddressBalance);
+
+  AddressBalance = await getBalance(client, 
+    contracts["OHM"][1].contractAddress,
+    accAddress);  
+  console.log("OHM balance : ", AddressBalance);
 
 }
 

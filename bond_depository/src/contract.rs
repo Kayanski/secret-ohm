@@ -36,23 +36,53 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     msg: InitMsg,
 ) -> StdResult<InitResponse> {
 
+    if !is_valid_name(&msg.name) {
+        return Err(StdError::generic_err(
+            "Name is not in the expected format (3-30 UTF-8 bytes)",
+        ));
+    }
+    if !is_valid_symbol(&msg.symbol) {
+        return Err(StdError::generic_err(
+            "Ticker symbol is not in expected format [A-Z]{3,6}",
+        ));
+    }
+
     let admin = msg.admin.unwrap_or(env.message.sender);
     let prng_seed_hashed = sha_256(&msg.prng_seed.0);
+
+
+    let principle_decimals = snip20::token_info_query(
+        &deps.querier,
+        RESPONSE_BLOCK_SIZE,
+        msg.principle.token.code_hash.clone(),
+        msg.principle.token.address.clone(),
+    )?.decimals;
+
+    let ohm_decimals = snip20::token_info_query(
+        &deps.querier,
+        RESPONSE_BLOCK_SIZE,
+        msg.ohm.code_hash.clone(),
+        msg.ohm.address.clone(),
+    )?.decimals;
 
     let mut config = Config::from_storage(&mut deps.storage);
     config.set_constants(&Constants {
         ohm: msg.ohm.clone(),
+        ohm_decimals: ohm_decimals,
         principle: msg.principle.clone(),
+        principle_decimals: principle_decimals,
         treasury: msg.treasury.clone(),
         dao: msg.dao.clone(),
         bond_calculator: msg.bond_calculator.clone(),
         staking: None,
         terms: None,
         adjustment: None,
-
+        name: msg.name,
+        symbol: msg.symbol,
         admin: admin,
         prng_seed: prng_seed_hashed.to_vec(),
         contract_address: env.contract.address,
+
     })?;
 
     let messages = vec![
@@ -60,8 +90,8 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             env.contract_code_hash.clone(),
             None,
             RESPONSE_BLOCK_SIZE,
-            msg.principle.code_hash.clone(),
-            msg.principle.address.clone(),
+            msg.principle.token.code_hash.clone(),
+            msg.principle.token.address.clone(),
         )?
     ];
 
@@ -85,14 +115,13 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
                     from, amount, msg,..
                 } => receive(deps, env, from, amount.u128(), msg),
 
-
         HandleMsg::InitializeBondTerms{
-            control_variable,vesting_term,minimum_price,
+            control_variable,vesting_term,minimum_price, maximum_price,
             max_payout, fee, max_debt, initial_debt
         } => initialize_bond_terms(
             deps,env,
-            control_variable.u128(),vesting_term,minimum_price.u128(),
-            max_payout.u128(), fee.u128(), max_debt.u128(), initial_debt.u128()
+            control_variable,vesting_term,minimum_price, maximum_price,
+            max_payout, fee, max_debt, initial_debt
         ),
 
         HandleMsg::SetBondTerm{parameter,input} => set_bond_terms(deps,env, parameter, input.u128()),
@@ -129,6 +158,8 @@ pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryM
         QueryMsg::DebtDecay{block_height} => query_debt_decay(deps,block_height),
         QueryMsg::BondTerms{} => query_bond_terms(deps),
 
+        QueryMsg::TokenInfo {} => query_token_info(deps),
+
         QueryMsg::WithPermit { permit, query } => permit_queries(deps, permit, query),
         _ => viewing_keys_queries(deps, msg),
     }
@@ -144,16 +175,31 @@ fn pad_response(response: StdResult<HandleResponse>) -> StdResult<HandleResponse
     })
 }
 
+fn query_token_info<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>
+) -> QueryResult {
+    let config = ReadonlyConfig::from_storage(&deps.storage);
+    let consts = config.constants()?;
+
+    to_binary(&QueryAnswer::TokenInfo {
+        name: consts.name,
+        symbol: consts.symbol,
+        decimals: consts.ohm_decimals,
+        total_supply: None,
+    })
+}
+
 pub fn initialize_bond_terms<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    control_variable: u128, 
+    control_variable: Uint128, 
     vesting_term: u64,
-    minimum_price: u128,
-    max_payout: u128,
-    fee: u128,
-    max_debt: u128, 
-    initial_debt: u128
+    minimum_price: Uint128,
+    maximum_price: Uint128,
+    max_payout: Uint128,
+    fee: Uint128,
+    max_debt: Uint128, 
+    initial_debt: Uint128
 ) -> StdResult<HandleResponse> {
     let mut config = Config::from_storage(&mut deps.storage);
     check_if_admin(&config,&env.message.sender)?;
@@ -162,16 +208,17 @@ pub fn initialize_bond_terms<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("Bonds must be initialized from 0"));
     }
     consts.terms = Some(Terms{
-        control_variable:Uint128(control_variable),
+        control_variable,
         vesting_term,
-        minimum_price: Uint128(minimum_price),
-        max_payout:Uint128(max_payout),
-        fee:Uint128(fee),
-        max_debt:Uint128(max_debt),
+        minimum_price,
+        maximum_price,
+        max_payout,
+        fee,
+        max_debt,
     });
     config.set_constants(&consts)?;
 
-    config.set_total_debt(initial_debt);
+    config.set_total_debt(initial_debt.u128());
     config.set_last_decay(env.block.height);
     Ok(HandleResponse {
         messages: vec![],
@@ -193,20 +240,20 @@ pub fn set_bond_terms<S: Storage, A: Api, Q: Querier>(
     let mut terms = consts.terms.unwrap();
     match parameter{
         BondParameter::Vesting => {
-            if input < 10000 {
+            if input < 21600 {
                 return Err(StdError::generic_err("Vesting must be longer than 36 hours" ));
             }
             terms.vesting_term = input.try_into().unwrap();
         },
         BondParameter::Payout => {
             if input > 1000 {
-                return Err(StdError::generic_err("Vesting must be longer than 36 hours" ));
+                return Err(StdError::generic_err("max payout should not be higher then 1% of the OHM total supply" ));
             }
             terms.max_payout = Uint128(input);
         },
         BondParameter::Fee => {
             if input > 10000 {
-                return Err(StdError::generic_err("Vesting must be longer than 36 hours" ));
+                return Err(StdError::generic_err("Fee should not be higher than 100%" ));
             }
             terms.fee = Uint128(input);
         },
@@ -273,7 +320,11 @@ pub fn set_staking<S: Storage, A: Api, Q: Querier>(
 }
 
 /* register receive after receiving principle from someone */
-/*IERC20( principle ).safeTransferFrom( msg.sender, address(this), _amount );*/
+/* amount is the amount of principle received */
+/// We query its value in terms of OHM (value)
+/// Then we see what the payout will be 
+// Payout = (value in terms of OHM)/(bond_price in terms of OHM)*100
+
 pub fn deposit<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -289,7 +340,7 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
         StdError::generic_err("The bond terms were not initialized")
     })?;
     let block_height = env.block.height;
-    if token != consts.principle.address{
+    if token != consts.principle.token.address{
         return Err(StdError::generic_err(format!("This bond is only for the token: {}",token)));
     }
     if config.total_debt() > terms.max_debt.u128(){
@@ -302,12 +353,12 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
          return Err(StdError::generic_err("Slippage limit: more than max price"));
     }
 
-    let value_of_query_msg = TreasuryQueryMsg::ValueOf{token: consts.principle.address.clone(), amount:Uint128(amount)};
+    let value_of_query_msg = TreasuryQueryMsg::ValueOf{token: consts.principle.token.address.clone(), amount:Uint128(amount)};
     let value_of_response: ValueOfResponse = value_of_query_msg.query(
         &deps.querier,
         consts.treasury.code_hash.clone(),
         consts.treasury.address.clone(),
-    ).unwrap();
+    )?;
     let value = value_of_response.value_of.value.u128();
 
     let payout = payout_for(deps,env.block.height,value)?;
@@ -336,6 +387,7 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
         principle is already transferred, so we deposit it in the treasury
         We return payout OHM to the Dao
     */
+
     messages.push(
         snip20::send_msg(
             consts.treasury.address,
@@ -347,8 +399,8 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
             )?),
             None,
             RESPONSE_BLOCK_SIZE,
-            consts.principle.code_hash,
-            consts.principle.address
+            consts.principle.token.code_hash,
+            consts.principle.token.address
         )?
     );
 
@@ -374,7 +426,7 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
     let mut bonds = BondInfo::from_storage(&mut deps.storage);
     bonds.set_bond(&canon_depositor,Bond{
         payout : Uint128(bonds.bond(&canon_depositor).payout.u128()
-        .checked_add(value).ok_or_else(||{
+        .checked_add(payout).ok_or_else(||{
             StdError::generic_err("Too much bond debt")
         })?), 
         vesting: terms.vesting_term,
@@ -385,7 +437,7 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
     adjust(deps,env)?; // control variable is adjusted
 
     Ok(HandleResponse {
-        messages: vec![],
+        messages: messages,
         log: vec![],
         data: Some(to_binary(&HandleAnswer::Deposit{ status: Success, payout: Uint128(payout) })?),
     })
@@ -409,19 +461,36 @@ pub fn redeem<S: Storage, A: Api, Q: Querier>(
     if  percent_vested >= 10_000  { // if fully vested
         payout = info.payout;
         bond_to_set = Bond::default();
-        stake_or_send_return = stake_or_send(deps, recipient, stake, info.payout.u128() ); // pay user everything due
-        messages.extend(stake_or_send_return?.messages);
+        stake_or_send_return = stake_or_send(deps, recipient, stake, info.payout.u128() )?; // pay user everything due
+        messages.extend(stake_or_send_return.messages);
     } else { // if unfinished
         // calculate payout vested
-        payout = Uint128(info.payout.u128() *  percent_vested / 10_000);
+        payout = Uint128(info.payout.u128()
+            .checked_mul(percent_vested)
+            .ok_or_else(||{
+                StdError::generic_err("Multiplication through the roof")
+            })?
+            .checked_div(10_000)
+            .ok_or_else(||{
+                StdError::generic_err("Not possible to divide this thing")
+            })?
+        );
         bond_to_set = Bond{
             payout: (info.payout - payout)?,
-            vesting: info.vesting - (block_height - info.last_block),
+            vesting: info.vesting.checked_sub(
+                block_height.checked_sub(
+                    info.last_block
+                ).ok_or_else(||{
+                    StdError::generic_err("Block height before the bond last block, weird flex here")
+                })?
+            ).ok_or_else(||{
+                StdError::generic_err("No bond contracted")
+            })?, 
             last_block: block_height,
             price_paid: info.price_paid
         };
-        stake_or_send_return = stake_or_send(deps,recipient, stake, payout.u128() );
-        messages.extend(stake_or_send_return?.messages);
+        stake_or_send_return = stake_or_send(deps,recipient, stake, payout.u128() )?;
+        messages.extend(stake_or_send_return.messages);
     }
     //Update user info
     let mut bonds = BondInfo::from_storage(&mut deps.storage);
@@ -488,11 +557,13 @@ pub fn adjust<S: Storage, A: Api, Q: Querier>(
                 terms.control_variable = terms.control_variable + adjustment.rate;
                 if terms.control_variable >= adjustment.target {
                     adjustment.rate = Uint128(0);
+                    terms.control_variable = adjustment.target;
                 }
             } else {
                 terms.control_variable = (terms.control_variable - adjustment.rate)?;
                 if terms.control_variable <= adjustment.target {
                     adjustment.rate = Uint128(0);
+                    terms.control_variable = adjustment.target;
                 }
             }
             adjustment.last_block = env.block.height;
@@ -530,7 +601,7 @@ pub fn max_payout<S: Storage, A: Api, Q: Querier>(
             StdError::generic_err("too much payout")
         }
     )?
-    .checked_div(100_000 )
+    .checked_div(100_000)
     .ok_or_else(||{
             StdError::generic_err("Unaccessible Error")
         }
@@ -545,22 +616,26 @@ fn query_max_payout<S: Storage, A: Api, Q: Querier>(
     })
 }
 
+// Payout = value/bond_price*100
+
+
 pub fn payout_for<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     block_height: u64,
     value: u128
 ) -> StdResult<u128> {
     value
-    .checked_div(bond_price(deps,block_height)?)
-    .ok_or_else(||{
-            StdError::generic_err("too much payout")
-        }
-    )?
     .checked_mul(100_u128)
     .ok_or_else(||{
             StdError::generic_err("Unaccessible Error")
         }
+    )?
+    .checked_div(bond_price(deps,block_height)?)
+    .ok_or_else(||{
+            StdError::generic_err("too much payout")
+        }
     )
+    
 }
 
 fn query_payout_for<S: Storage, A: Api, Q: Querier>(
@@ -573,6 +648,10 @@ fn query_payout_for<S: Storage, A: Api, Q: Querier>(
     })
 }
 
+
+
+
+
 pub fn bond_price<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     block_height: u64
@@ -581,7 +660,7 @@ pub fn bond_price<S: Storage, A: Api, Q: Querier>(
     let mut price = terms.control_variable.u128()
     .checked_mul(debt_ratio(deps, block_height)?)
     .ok_or_else(||{
-            StdError::generic_err("too much payout")
+            StdError::generic_err("Control Variable too high")
         }
     )?
     .checked_add(1_000_000_000)
@@ -596,6 +675,9 @@ pub fn bond_price<S: Storage, A: Api, Q: Querier>(
     )?;
     if price < terms.minimum_price.u128(){
         price = terms.minimum_price.u128()
+    }
+    if price > terms.maximum_price.u128(){
+        price = terms.maximum_price.u128()
     }
     Ok(price)
 }
@@ -639,11 +721,11 @@ fn query_bond_price<S: Storage, A: Api, Q: Querier>(
         price = terms.minimum_price.u128()
     }else if terms.minimum_price.u128() != 0{
         terms.minimum_price = Uint128(0);
+        let mut config = Config::from_storage(&mut deps.storage);
+        consts.terms = Some(terms);
+        config.set_constants(&consts)?;
     }
 
-    let mut config = Config::from_storage(&mut deps.storage);
-    consts.terms = Some(terms);
-    config.set_constants(&consts)?;
     Ok(price)
 }
 
@@ -657,7 +739,7 @@ pub fn bond_price_in_usd<S: Storage, A: Api, Q: Querier>(
     let price;
     if let Some(bond_calculator) = bond_calculator{
         // Query the bondcalculator for the bound price
-        let markdown_query_msg = BondCalculatorQueryMsg::Markdown{principle:consts.principle};
+        let markdown_query_msg = BondCalculatorQueryMsg::Markdown{pair:consts.principle.pair.unwrap()};
         let markdown_response: MarkdownResponse = markdown_query_msg.query(
             &deps.querier,
             bond_calculator.code_hash.clone(),
@@ -665,7 +747,7 @@ pub fn bond_price_in_usd<S: Storage, A: Api, Q: Querier>(
         )?;
 
         price = bond_price(deps,block_height)?
-        .checked_mul(markdown_response.markdown.price.u128())
+        .checked_mul(markdown_response.markdown.value.u128())
         .ok_or_else(||{
                 StdError::generic_err("BondPrice too high")
             }
@@ -676,12 +758,9 @@ pub fn bond_price_in_usd<S: Storage, A: Api, Q: Querier>(
             }
         )?;
     }else{
-        let decimals = snip20::token_info_query(
-            &deps.querier,
-            RESPONSE_BLOCK_SIZE,
-            consts.principle.code_hash,
-            consts.principle.address,
-        )?.decimals;
+
+        // BondPrice in USD is bond_price*10^principle_decimals/100
+        let decimals = consts.principle_decimals;
         price = bond_price(deps,block_height)?
         .checked_mul(10_u128.pow(decimals.into()))
         .ok_or_else(||{
@@ -743,7 +822,7 @@ pub fn standardized_debt_ratio<S: Storage, A: Api, Q: Querier>(
     let ratio;
     if let Some(bond_calculator) = bond_calculator{
         // Query the bondcalculator for the bound price
-        let markdown_query_msg = BondCalculatorQueryMsg::Markdown{principle:consts.principle};
+        let markdown_query_msg = BondCalculatorQueryMsg::Markdown{pair:consts.principle.pair.unwrap()};
         let markdown_response: MarkdownResponse = markdown_query_msg.query(
             &deps.querier,
             bond_calculator.code_hash.clone(),
@@ -751,7 +830,7 @@ pub fn standardized_debt_ratio<S: Storage, A: Api, Q: Querier>(
         )?;
 
         ratio = debt_ratio(deps, block_height)?
-        .checked_mul(markdown_response.markdown.price.u128())
+        .checked_mul(markdown_response.markdown.value.u128())
         .ok_or_else(||{
                 StdError::generic_err("ratio too high")
             }
@@ -1037,12 +1116,15 @@ pub fn viewing_keys_queries<S: Storage, A: Api, Q: Querier>(
             key.check_viewing_key(&[0u8; VIEWING_KEY_SIZE]);
         } else if key.check_viewing_key(expected_key.unwrap().as_slice()) {
             return match msg {
+                QueryMsg::Balance { address, .. } => query_balance(deps, &address),
                 QueryMsg::BondInfo { address, .. } => query_bond_info(deps, address),
                 QueryMsg::PercentVestedFor { address, block_height, .. } 
                     => query_percent_vested_for(deps, block_height, address),
                 QueryMsg::PendingPayoutFor { address, block_height, .. } 
                     => query_pending_payout_for(deps, block_height, address),
-                _ => panic!("This query type does not require authentication"),
+                _ => Err(StdError::generic_err(
+                        "This query type does not require authentication",
+                    )),
             };
         }
     }
@@ -1072,6 +1154,18 @@ fn query_contract_info<S: ReadonlyStorage>(storage: &S) -> QueryResult {
         last_decay: config.last_decay(),
     })
 }
+
+pub fn query_balance<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    account: &HumanAddr,
+) -> StdResult<Binary> {
+    let address = deps.api.canonical_address(account)?;
+    let bond = ReadonlyBondInfo::from_storage(&deps.storage).bond(&address);
+    let amount = bond.payout;
+    let response = QueryAnswer::Balance { amount };
+    to_binary(&response)
+}
+
 
 fn query_bond_info<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
@@ -1183,4 +1277,16 @@ fn check_if_admin<S: Storage>(config: &Config<S>, account: &HumanAddr) -> StdRes
     }
 
     Ok(())
+}
+
+fn is_valid_name(name: &str) -> bool {
+    let len = name.len();
+    (3..=30).contains(&len)
+}
+
+fn is_valid_symbol(symbol: &str) -> bool {
+    let len = symbol.len();
+    let len_is_valid = (3..=6).contains(&len);
+
+    len_is_valid && symbol.bytes().all(|byte| (b'A'..=b'Z').contains(&byte))
 }

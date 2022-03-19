@@ -7,7 +7,7 @@ use cosmwasm_std::{Uint128};
 
 use crate::state::Contract;
 
-use crate::secretswap_utils::PairInfo;
+use crate::secretswap_utils::{PairInfo, PoolInfo};
 
 use secret_toolkit::utils::{Query};
 
@@ -53,7 +53,7 @@ pub enum QueryMsg {
 #[serde(rename_all = "snake_case")]
 pub enum QueryAnswer {
     GetKValue {
-        value: Uint128,
+        value: String,
     },
     GetTotalValue{
         value: Uint128,
@@ -79,6 +79,9 @@ pub enum PairQueryMsg{
     Pair{
 
     },
+    Pool{
+
+    }
 }
 
 impl Query for PairQueryMsg {
@@ -87,7 +90,12 @@ impl Query for PairQueryMsg {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PairResponse{
-    pub pair_info: PairInfo,
+    pub pair: PairInfo,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct PoolResponse{
+    pub pool: PoolInfo,
 }
 
 

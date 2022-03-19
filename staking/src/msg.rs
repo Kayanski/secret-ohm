@@ -3,12 +3,11 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::batch;
-use crate::state::{Contract, ContractType};
+use crate::state::{Contract, ContractType, Epoch};
 use crate::viewing_key::ViewingKey;
 use cosmwasm_std::{Binary, HumanAddr, StdError, StdResult, Uint128};
-use secret_toolkit::permit::Permit;
 use secret_toolkit::utils::{HandleCallback, Query};
+use secret_toolkit::permit::Permit;
 
 pub const RESPONSE_BLOCK_SIZE: usize = 256;
 
@@ -78,7 +77,7 @@ impl InitConfig {
 #[serde(rename_all = "snake_case")]
 pub enum ReceiveMsg {
     Stake { recipient: Option<HumanAddr> },
-    Unstake { trigger: bool },
+    Unstake { },
     ReturnLockBonus {},
 }
 
@@ -93,129 +92,6 @@ pub enum HandleMsg {
         msg: Binary,
     },
 
-    // Native coin interactions
-    Redeem {
-        amount: Uint128,
-        denom: Option<String>,
-        padding: Option<String>,
-    },
-    Deposit {
-        padding: Option<String>,
-    },
-
-    // Base ERC-20 stuff
-    Transfer {
-        recipient: HumanAddr,
-        amount: Uint128,
-        memo: Option<String>,
-        padding: Option<String>,
-    },
-    Send {
-        recipient: HumanAddr,
-        recipient_code_hash: Option<String>,
-        amount: Uint128,
-        msg: Option<Binary>,
-        memo: Option<String>,
-        padding: Option<String>,
-    },
-    BatchTransfer {
-        actions: Vec<batch::TransferAction>,
-        padding: Option<String>,
-    },
-    BatchSend {
-        actions: Vec<batch::SendAction>,
-        padding: Option<String>,
-    },
-    Burn {
-        amount: Uint128,
-        memo: Option<String>,
-        padding: Option<String>,
-    },
-    RegisterReceive {
-        code_hash: String,
-        padding: Option<String>,
-    },
-    CreateViewingKey {
-        entropy: String,
-        padding: Option<String>,
-    },
-    SetViewingKey {
-        key: String,
-        padding: Option<String>,
-    },
-
-    // Allowance
-    IncreaseAllowance {
-        spender: HumanAddr,
-        amount: Uint128,
-        expiration: Option<u64>,
-        padding: Option<String>,
-    },
-    DecreaseAllowance {
-        spender: HumanAddr,
-        amount: Uint128,
-        expiration: Option<u64>,
-        padding: Option<String>,
-    },
-    TransferFrom {
-        owner: HumanAddr,
-        recipient: HumanAddr,
-        amount: Uint128,
-        memo: Option<String>,
-        padding: Option<String>,
-    },
-    SendFrom {
-        owner: HumanAddr,
-        recipient: HumanAddr,
-        recipient_code_hash: Option<String>,
-        amount: Uint128,
-        msg: Option<Binary>,
-        memo: Option<String>,
-        padding: Option<String>,
-    },
-    BatchTransferFrom {
-        actions: Vec<batch::TransferFromAction>,
-        padding: Option<String>,
-    },
-    BatchSendFrom {
-        actions: Vec<batch::SendFromAction>,
-        padding: Option<String>,
-    },
-    BurnFrom {
-        owner: HumanAddr,
-        amount: Uint128,
-        memo: Option<String>,
-        padding: Option<String>,
-    },
-    BatchBurnFrom {
-        actions: Vec<batch::BurnFromAction>,
-        padding: Option<String>,
-    },
-
-    // Mint
-    Mint {
-        recipient: HumanAddr,
-        amount: Uint128,
-        memo: Option<String>,
-        padding: Option<String>,
-    },
-    BatchMint {
-        actions: Vec<batch::MintAction>,
-        padding: Option<String>,
-    },
-    AddMinters {
-        minters: Vec<HumanAddr>,
-        padding: Option<String>,
-    },
-    RemoveMinters {
-        minters: Vec<HumanAddr>,
-        padding: Option<String>,
-    },
-    SetMinters {
-        minters: Vec<HumanAddr>,
-        padding: Option<String>,
-    },
-
     // Admin
     ChangeAdmin {
         address: HumanAddr,
@@ -226,11 +102,6 @@ pub enum HandleMsg {
         padding: Option<String>,
     },
 
-    // Permit
-    RevokePermit {
-        permit_name: String,
-        padding: Option<String>,
-    },
     //Staking
     Rebase {
         padding: Option<String>,
@@ -258,91 +129,25 @@ pub enum HandleMsg {
         warmup_period: u64,
         padding: Option<String>,
     },
+
+    // Permit
+    RevokePermit {
+        permit_name: String,
+        padding: Option<String>,
+    },
+    CreateViewingKey {
+        entropy: String,
+        padding: Option<String>,
+    },
+    SetViewingKey {
+        key: String,
+        padding: Option<String>,
+    },
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum HandleAnswer {
-    // Native
-    Deposit {
-        status: ResponseStatus,
-    },
-    Redeem {
-        status: ResponseStatus,
-    },
-
-    // Base
-    Transfer {
-        status: ResponseStatus,
-    },
-    Send {
-        status: ResponseStatus,
-    },
-    BatchTransfer {
-        status: ResponseStatus,
-    },
-    BatchSend {
-        status: ResponseStatus,
-    },
-    Burn {
-        status: ResponseStatus,
-    },
-    RegisterReceive {
-        status: ResponseStatus,
-    },
-    CreateViewingKey {
-        key: ViewingKey,
-    },
-    SetViewingKey {
-        status: ResponseStatus,
-    },
-
-    // Allowance
-    IncreaseAllowance {
-        spender: HumanAddr,
-        owner: HumanAddr,
-        allowance: Uint128,
-    },
-    DecreaseAllowance {
-        spender: HumanAddr,
-        owner: HumanAddr,
-        allowance: Uint128,
-    },
-    TransferFrom {
-        status: ResponseStatus,
-    },
-    SendFrom {
-        status: ResponseStatus,
-    },
-    BatchTransferFrom {
-        status: ResponseStatus,
-    },
-    BatchSendFrom {
-        status: ResponseStatus,
-    },
-    BurnFrom {
-        status: ResponseStatus,
-    },
-    BatchBurnFrom {
-        status: ResponseStatus,
-    },
-
-    // Mint
-    Mint {
-        status: ResponseStatus,
-    },
-    BatchMint {
-        status: ResponseStatus,
-    },
-    AddMinters {
-        status: ResponseStatus,
-    },
-    RemoveMinters {
-        status: ResponseStatus,
-    },
-    SetMinters {
-        status: ResponseStatus,
-    },
 
     Stake {
         status: ResponseStatus,
@@ -387,61 +192,37 @@ pub enum HandleAnswer {
     RevokePermit {
         status: ResponseStatus,
     },
+    CreateViewingKey {
+        key: ViewingKey,
+    },
+    SetViewingKey {
+        status: ResponseStatus,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
-    TokenInfo {},
-    TokenConfig {},
+    ContractInfo {},
     ContractStatus {},
     Epoch {},
-    ExchangeRate {},
-    Allowance {
-        owner: HumanAddr,
-        spender: HumanAddr,
-        key: String,
-    },
-    Balance {
+    //Staking Msgs
+    ContractBalance {},
+    Index {},
+    WarmupInfo {
         address: HumanAddr,
         key: String,
     },
-    TransferHistory {
-        address: HumanAddr,
-        key: String,
-        page: Option<u32>,
-        page_size: u32,
-    },
-    TransactionHistory {
-        address: HumanAddr,
-        key: String,
-        page: Option<u32>,
-        page_size: u32,
-    },
-    Minters {},
     WithPermit {
         permit: Permit,
         query: QueryWithPermit,
     },
-    //Staking Msgs
-    ContractBalance {},
-    Index {},
 }
 
 impl QueryMsg {
     pub fn get_validation_params(&self) -> (Vec<&HumanAddr>, ViewingKey) {
         match self {
-            Self::Balance { address, key } => (vec![address], ViewingKey(key.clone())),
-            Self::TransferHistory { address, key, .. } => (vec![address], ViewingKey(key.clone())),
-            Self::TransactionHistory { address, key, .. } => {
-                (vec![address], ViewingKey(key.clone()))
-            }
-            Self::Allowance {
-                owner,
-                spender,
-                key,
-                ..
-            } => (vec![owner, spender], ViewingKey(key.clone())),
+            Self::WarmupInfo { address, key } => (vec![address], ViewingKey(key.clone())),
             _ => panic!("This query type does not require authentication"),
         }
     }
@@ -449,59 +230,23 @@ impl QueryMsg {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum QueryWithPermit {
-    Allowance {
-        owner: HumanAddr,
-        spender: HumanAddr,
-    },
-    Balance {},
-    TransferHistory {
-        page: Option<u32>,
-        page_size: u32,
-    },
-    TransactionHistory {
-        page: Option<u32>,
-        page_size: u32,
-    },
+pub enum QueryWithPermit { 
+   WarmupInfo{}
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryAnswer {
-    TokenInfo {
-        name: String,
-        symbol: String,
-        decimals: u8,
-        total_supply: Option<Uint128>,
-    },
-    TokenConfig {
-        public_total_supply: bool,
-        deposit_enabled: bool,
-        redeem_enabled: bool,
-        mint_enabled: bool,
-        burn_enabled: bool,
+    ContractInfo {
+        admin: HumanAddr,
+        ohm: Contract,
+        sohm: Contract,
+        epoch: Epoch,
+        total_bonus: Uint128,
+        warmup_period: u64,
     },
     ContractStatus {
         status: ContractStatusLevel,
-    },
-    ExchangeRate {
-        rate: Uint128,
-        denom: String,
-    },
-    Allowance {
-        spender: HumanAddr,
-        owner: HumanAddr,
-        allowance: Uint128,
-        expiration: Option<u64>,
-    },
-    Balance {
-        amount: Uint128,
-    },
-    ViewingKeyError {
-        msg: String,
-    },
-    Minters {
-        minters: Vec<HumanAddr>,
     },
     ContractBalance {
         amount: Uint128,
@@ -509,6 +254,9 @@ pub enum QueryAnswer {
     Index {
         index: String,
     },
+    ViewingKeyError {
+        msg: String,
+    },  
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]

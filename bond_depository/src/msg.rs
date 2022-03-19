@@ -3,7 +3,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::state::{Contract, Adjust, Terms};
+use crate::state::{Contract, Principle, Adjust, Terms};
 use crate::viewing_key::ViewingKey;
 use cosmwasm_std::{Binary, HumanAddr, StdError, StdResult, Uint128};
 use secret_toolkit::permit::Permit;
@@ -15,8 +15,10 @@ pub const RESPONSE_BLOCK_SIZE: usize = 256;
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct InitMsg {
+    pub name: String,
+    pub symbol: String,
     pub ohm: Contract,
-    pub principle: Contract,
+    pub principle: Principle,
     pub treasury: Contract,
     pub dao: HumanAddr,
     pub bond_calculator: Option<Contract>,
@@ -49,6 +51,7 @@ pub enum HandleMsg {
         control_variable: Uint128, 
         vesting_term: u64,
         minimum_price: Uint128,
+        maximum_price: Uint128,
         max_payout: Uint128,
         fee: Uint128,
         max_debt: Uint128, 
@@ -158,6 +161,7 @@ pub enum HandleAnswer {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
+    TokenInfo {},
     ContractInfo {},
     MaxPayout{},
     PayoutFor{
@@ -200,12 +204,17 @@ pub enum QueryMsg {
         permit: Permit,
         query: QueryWithPermit,
     },
+    Balance {
+        address: HumanAddr,
+        key: String,
+    },
     BondTerms{},
 }
 
 impl QueryMsg {
     pub fn get_validation_params(&self) -> (Vec<&HumanAddr>, ViewingKey) {
         match self {
+            Self::Balance { address, key } => (vec![address], ViewingKey(key.clone())),
             Self::BondInfo { address, key } => (vec![address], ViewingKey(key.clone())),
             Self::PercentVestedFor { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::PendingPayoutFor { address, key, .. } => (vec![address], ViewingKey(key.clone())),
@@ -229,9 +238,15 @@ pub enum QueryWithPermit {
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryAnswer {
+    TokenInfo {
+        name: String,
+        symbol: String,
+        decimals: u8,
+        total_supply: Option<Uint128>,
+    },
     ContractInfo {
         ohm: Contract,
-        principle: Contract,
+        principle: Principle,
         treasury: Contract,
         dao: HumanAddr,
         bond_calculator: Option<Contract>,
@@ -281,9 +296,11 @@ pub enum QueryAnswer {
     PendingPayoutFor{
         payout: Uint128
     },
-
     ViewingKeyError {
         msg: String,
+    },
+    Balance {
+        amount: Uint128,
     },
 }
 
@@ -343,7 +360,7 @@ impl HandleCallback for StakingHandleMsg{
 #[serde(rename_all = "snake_case")]
 pub enum BondCalculatorQueryMsg{
     Markdown{
-        principle: Contract
+        pair: Contract
     },
 }
 
@@ -353,7 +370,7 @@ impl Query for BondCalculatorQueryMsg {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Markdown{
-    pub price: Uint128,
+    pub value: Uint128,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct MarkdownResponse{

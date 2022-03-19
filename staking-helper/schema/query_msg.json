@@ -1,0 +1,109 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QueryMsg",
+  "anyOf": [
+    {
+      "type": "object",
+      "required": [
+        "get_k_value"
+      ],
+      "properties": {
+        "get_k_value": {
+          "type": "object",
+          "required": [
+            "pair"
+          ],
+          "properties": {
+            "pair": {
+              "$ref": "#/definitions/Contract"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "get_total_value"
+      ],
+      "properties": {
+        "get_total_value": {
+          "type": "object",
+          "required": [
+            "pair"
+          ],
+          "properties": {
+            "pair": {
+              "$ref": "#/definitions/Contract"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "valuation"
+      ],
+      "properties": {
+        "valuation": {
+          "type": "object",
+          "required": [
+            "amount",
+            "pair"
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "pair": {
+              "$ref": "#/definitions/Contract"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "markdown"
+      ],
+      "properties": {
+        "markdown": {
+          "type": "object",
+          "required": [
+            "pair"
+          ],
+          "properties": {
+            "pair": {
+              "$ref": "#/definitions/Contract"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "Contract": {
+      "type": "object",
+      "required": [
+        "address",
+        "code_hash"
+      ],
+      "properties": {
+        "address": {
+          "$ref": "#/definitions/HumanAddr"
+        },
+        "code_hash": {
+          "type": "string"
+        }
+      }
+    },
+    "HumanAddr": {
+      "type": "string"
+    },
+    "Uint128": {
+      "type": "string"
+    }
+  }
+}

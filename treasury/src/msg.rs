@@ -4,7 +4,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{Binary, HumanAddr, StdError, StdResult, Uint128};
-use crate::state::{Contract, ManagingRole};
+use crate::state::{Contract, Pair, ManagingRole, RESPONSE_BLOCK_SIZE};
+use secret_toolkit::utils::Query;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct InitialBalance {
@@ -31,6 +32,10 @@ pub enum ReceiveMsg{
     Deposit{
         profit : Uint128
     },
+    Withdraw{
+        token : HumanAddr,
+        amount : Uint128
+    },
     RepayDebt{
         
     },
@@ -44,10 +49,6 @@ pub enum HandleMsg {
         from: HumanAddr,
         amount: Uint128,
         msg: Binary,
-    },
-    Withdraw{
-        token : HumanAddr,
-        amount : Uint128
     },
     IncurDebt{
         token : HumanAddr,
@@ -232,6 +233,32 @@ pub fn u8_to_status_level(status_level: u8) -> StdResult<ContractStatusLevel> {
         _ => Err(StdError::generic_err("Invalid state level")),
     }
 }
+
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CalculatorQueryMsg {
+    Valuation { 
+        pair: Pair,
+        amount: Uint128,
+    }
+}
+
+impl Query for CalculatorQueryMsg {
+    const BLOCK_SIZE: usize = RESPONSE_BLOCK_SIZE;
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Valuation {
+    pub value: Uint128,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct ValuationResponse {
+    pub valuation: Valuation,
+}
+
+
 
 // Take a Vec<u8> and pad it up to a multiple of `block_size`, using spaces at the end.
 pub fn space_pad(block_size: usize, message: &mut Vec<u8>) -> &mut Vec<u8> {

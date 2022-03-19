@@ -1,10 +1,11 @@
 /// This contract implements SNIP-20 standard:
 /// https://github.com/SecretFoundation/SNIPs/blob/master/SNIP-20.md
 use cosmwasm_std::{
-    from_binary, log, to_binary, Api, Binary, Env, Extern, HandleResponse, HumanAddr, InitResponse,
+    from_binary, to_binary, Api, Binary, Env, Extern, HandleResponse, HumanAddr, InitResponse,
     Querier, QueryResult, ReadonlyStorage, StdError, StdResult, Storage, Uint128,
 };
 
+use crate::msg::QueryWithPermit;
 use crate::msg::{
     space_pad, BalanceForGonsResponse, ChangesInRebaseResponse, ContractStatusLevel,
     DistributorHandleMsg, GonsForBalanceResponse, HandleAnswer, HandleMsg, IndexResponse, InitMsg,
@@ -13,12 +14,13 @@ use crate::msg::{
 };
 use crate::rand::sha_256;
 use crate::state::{
-    read_viewing_key, set_receiver_hash, write_viewing_key, Claim, Config, ConfigContracts,
+    read_viewing_key, write_viewing_key, Claim, Config, ConfigContracts,
     Constants, Contract, ContractType, Epoch, ReadonlyConfig,
 };
 use crate::viewing_key::{ViewingKey, VIEWING_KEY_SIZE};
 use secret_toolkit::snip20;
 use secret_toolkit::utils::{HandleCallback, Query};
+use secret_toolkit::permit::{validate, Permission, Permit, RevokedPermits};
 
 use primitive_types::U256;
 /// We make sure that responses from `handle` are padded to a multiple of this size.
@@ -205,7 +207,7 @@ pub fn rebase<S: Storage, A: Api, Q: Querier>(
     let distributor = config.contracts()?.distributor;
     let mut messages = vec![];
     if consts.epoch.end_block <= env.block.height {
-        //We start by rebasing the sOHM contract (this future call, calls not other ExecuteMsg)
+        //We start by rebasing the sOHM contract (this is a future call, it doesn't call the HandleMsg right now)
         //We need to ask the contract for a valuation
         let rebase_msg = SOhmHandleMsg::Rebase {
             profit: consts.epoch.distribute,
@@ -351,9 +353,9 @@ pub fn forfeit<S: Storage, A: Api, Q: Querier>(
     let mut config = Config::from_storage(&mut deps.storage);
     let canon_sender = deps.api.canonical_address(&env.message.sender)?;
     let claim_info = config.warmup_info(&canon_sender).clone();
+
     //delete the claim in memory for the sender
     config.set_warmup_info(&canon_sender, Claim::default())?;
-    let mut messages = vec![];
 
     //We get the balance for gons equivalent
     let balance_for_gons_query_msg = SOhmQueryMsg::BalanceForGons {
@@ -366,11 +368,13 @@ pub fn forfeit<S: Storage, A: Api, Q: Querier>(
             config.constants()?.sohm.address.clone(),
         )
         .unwrap();
+
     //We send the retrieve message from the warmup contract
     let retrieve_msg = WarmupContractHandleMsg::Retrieve {
         staker: env.contract.address.clone(),
         amount: balance_for_gons_response.balance_for_gons.amount,
     };
+    let mut messages = vec![];
     messages.push(retrieve_msg.to_cosmos_msg(
         config.contracts()?.warmup.code_hash,
         config.contracts()?.warmup.address,
@@ -413,26 +417,20 @@ pub fn toggle_deposit_lock<S: Storage, A: Api, Q: Querier>(
 //TODO this is a receive message, after an sOHM deposit from the sender to this address
 pub fn unstake<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
-    env: Env,
+    _env: Env,
     sender: HumanAddr,
     amount: u128,
-    trigger: bool,
 ) -> StdResult<HandleResponse> {
-    let mut messages = vec![];
-    if trigger {
-        let rebase_response = rebase(deps, env)?;
-        messages.extend(rebase_response.messages);
-    }
     let config = ReadonlyConfig::from_storage(&deps.storage);
 
-    messages.push(snip20::transfer_msg(
+    let messages = vec![snip20::transfer_msg(
         sender.clone(),
         Uint128(amount),
         None,
         RESPONSE_BLOCK_SIZE,
         config.constants()?.ohm.code_hash.clone(),
         config.constants()?.ohm.address.clone(),
-    )?);
+    )?];
     Ok(HandleResponse {
         messages: messages,
         log: vec![],
@@ -592,9 +590,9 @@ pub fn receive<S: Storage, A: Api, Q: Querier>(
                 ))
             }
         }
-        ReceiveMsg::Unstake { trigger, .. } => {
+        ReceiveMsg::Unstake { .. } => {
             if token == consts.sohm.address {
-                unstake(deps, env, from, amount, trigger)
+                unstake(deps, env, from, amount)
             } else {
                 Err(StdError::generic_err(
                     "You can't unstake with anything else than the staked treasury token",
@@ -641,10 +639,6 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             from, amount, msg, ..
         } => receive(deps, env, from, amount.u128(), msg),
 
-        HandleMsg::RegisterReceive { code_hash, .. } => try_register_receive(deps, env, code_hash),
-        HandleMsg::CreateViewingKey { entropy, .. } => try_create_key(deps, env, entropy),
-        HandleMsg::SetViewingKey { key, .. } => try_set_key(deps, env, key),
-
         // Other
         HandleMsg::ChangeAdmin { address, .. } => change_admin(deps, env, address),
         HandleMsg::SetContractStatus { level, .. } => set_contract_status(deps, env, level),
@@ -662,9 +656,10 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         } => set_contract(deps, env, contract_type, contract),
         HandleMsg::SetWarmupPeriod { warmup_period, .. } => {
             set_warmup_period(deps, env, warmup_period)
-        }
-
-        _ => Err(StdError::generic_err("TODO not handled right now")),
+        },
+        HandleMsg::CreateViewingKey { entropy, .. } => try_create_key(deps, env, entropy),
+        HandleMsg::SetViewingKey { key, .. } => try_set_key(deps, env, key),
+        HandleMsg::RevokePermit { permit_name, .. } => revoke_permit(deps, env, permit_name)
     };
 
     pad_response(response)
@@ -676,11 +671,25 @@ pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryM
         QueryMsg::Index {} => query_index(deps),
         QueryMsg::ContractStatus {} => query_contract_status(&deps.storage),
         QueryMsg::Epoch {} => query_epoch(&deps.storage),
-        /*
+        QueryMsg::ContractInfo {} => query_contract_info(&deps.storage),
         QueryMsg::WithPermit { permit, query } => permit_queries(deps, permit, query),
-        */
         _ => viewing_keys_queries(deps, msg),
     }
+}
+
+fn query_contract_info<S: ReadonlyStorage>(storage: &S) -> QueryResult {
+    let config = ReadonlyConfig::from_storage(storage);
+    let consts = config.constants()?;
+
+
+    to_binary(&QueryAnswer::ContractInfo { 
+        admin: consts.admin,
+        ohm:  consts.ohm,
+        sohm: consts.sohm,
+        epoch: consts.epoch,
+        total_bonus: consts.total_bonus,
+        warmup_period: consts.warmup_period
+    })
 }
 
 pub fn viewing_keys_queries<S: Storage, A: Api, Q: Querier>(
@@ -699,52 +708,15 @@ pub fn viewing_keys_queries<S: Storage, A: Api, Q: Querier>(
             // in a way which will allow to time the command and determine if a viewing key doesn't exist
             key.check_viewing_key(&[0u8; VIEWING_KEY_SIZE]);
         } else if key.check_viewing_key(expected_key.unwrap().as_slice()) {
-            panic!("This query type does not require authentication")
-            /*
             return match msg {
-                // Base
-                _ => ,
+                QueryMsg::WarmupInfo { address, .. } => query_warmup_info(deps, &address),
+                _ => panic!("This query type does not require authentication"),
             };
-            */
         }
     }
 
     to_binary(&QueryAnswer::ViewingKeyError {
         msg: "Wrong viewing key for this address or viewing key not set".to_string(),
-    })
-}
-
-fn query_contract_status<S: ReadonlyStorage>(storage: &S) -> QueryResult {
-    let config = ReadonlyConfig::from_storage(storage);
-
-    to_binary(&QueryAnswer::ContractStatus {
-        status: config.contract_status(),
-    })
-}
-
-fn query_epoch<S: ReadonlyStorage>(storage: &S) -> QueryResult {
-    let config = ReadonlyConfig::from_storage(storage);
-
-    to_binary(&config.constants()?.epoch)
-}
-
-fn change_admin<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    address: HumanAddr,
-) -> StdResult<HandleResponse> {
-    let mut config = Config::from_storage(&mut deps.storage);
-
-    check_if_admin(&config, &env.message.sender)?;
-
-    let mut consts = config.constants()?;
-    consts.admin = address;
-    config.set_constants(&consts)?;
-
-    Ok(HandleResponse {
-        messages: vec![],
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::ChangeAdmin { status: Success })?),
     })
 }
 
@@ -785,6 +757,80 @@ pub fn try_create_key<S: Storage, A: Api, Q: Querier>(
     })
 }
 
+fn permit_queries<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    permit: Permit,
+    query: QueryWithPermit,
+) -> Result<Binary, StdError> {
+    // Validate permit content
+    let token_address = ReadonlyConfig::from_storage(&deps.storage)
+        .constants()?
+        .contract_address;
+
+    let account = validate(deps, PREFIX_REVOKED_PERMITS, &permit, token_address)?;
+
+    // Permit validated! We can now execute the query.
+    match query {
+        QueryWithPermit::WarmupInfo {} => {
+            if !permit.check_permission(&Permission::Balance) {
+                return Err(StdError::generic_err(format!(
+                    "No permission to query balance, got permissions {:?}",
+                    permit.params.permissions
+                )));
+            }
+
+            query_warmup_info(deps, &account)
+        }
+    }
+}
+
+fn query_warmup_info<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    address: &HumanAddr
+) -> QueryResult {
+    let config = ReadonlyConfig::from_storage(&deps.storage);
+
+    let canon_addr = deps.api.canonical_address(address)?;
+    let claim_info = config.warmup_info(&canon_addr).clone();
+
+    to_binary(&claim_info)
+}
+
+
+fn query_contract_status<S: ReadonlyStorage>(storage: &S) -> QueryResult {
+    let config = ReadonlyConfig::from_storage(storage);
+
+    to_binary(&QueryAnswer::ContractStatus {
+        status: config.contract_status(),
+    })
+}
+
+fn query_epoch<S: ReadonlyStorage>(storage: &S) -> QueryResult {
+    let config = ReadonlyConfig::from_storage(storage);
+
+    to_binary(&config.constants()?.epoch)
+}
+
+fn change_admin<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    address: HumanAddr,
+) -> StdResult<HandleResponse> {
+    let mut config = Config::from_storage(&mut deps.storage);
+
+    check_if_admin(&config, &env.message.sender)?;
+
+    let mut consts = config.constants()?;
+    consts.admin = address;
+    config.set_constants(&consts)?;
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::ChangeAdmin { status: Success })?),
+    })
+}
+
 fn set_contract_status<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -803,22 +849,6 @@ fn set_contract_status<S: Storage, A: Api, Q: Querier>(
             status: Success,
         })?),
     })
-}
-
-fn try_register_receive<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    code_hash: String,
-) -> StdResult<HandleResponse> {
-    set_receiver_hash(&mut deps.storage, &env.message.sender, code_hash);
-    let res = HandleResponse {
-        messages: vec![],
-        log: vec![log("register_status", "success")],
-        data: Some(to_binary(&HandleAnswer::RegisterReceive {
-            status: Success,
-        })?),
-    };
-    Ok(res)
 }
 
 fn is_admin<S: Storage>(config: &Config<S>, account: &HumanAddr) -> StdResult<bool> {
@@ -847,6 +877,25 @@ fn check_equal(account1: &HumanAddr, account2: &HumanAddr) -> StdResult<()> {
         ));
     }
     Ok(())
+}
+
+fn revoke_permit<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    permit_name: String,
+) -> StdResult<HandleResponse> {
+    RevokedPermits::revoke_permit(
+        &mut deps.storage,
+        PREFIX_REVOKED_PERMITS,
+        &env.message.sender,
+        &permit_name,
+    );
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::RevokePermit { status: Success })?),
+    })
 }
 
 #[cfg(test)]
@@ -899,8 +948,7 @@ mod tests {
         let handle_result: HandleAnswer = from_binary(&handle_result.data.unwrap()).unwrap();
 
         match handle_result {
-            HandleAnswer::RegisterReceive { status }
-            | HandleAnswer::ChangeAdmin { status }
+            HandleAnswer::ChangeAdmin { status }
             | HandleAnswer::SetContractStatus { status }
             | HandleAnswer::RevokePermit { status }
             | HandleAnswer::Rebase { status }
@@ -920,8 +968,7 @@ mod tests {
         let handle_result: HandleAnswer = from_binary(&handle_result.data.unwrap()).unwrap();
 
         match handle_result {
-            HandleAnswer::RegisterReceive { status }
-            | HandleAnswer::ChangeAdmin { status }
+            HandleAnswer::ChangeAdmin { status }
             | HandleAnswer::SetContractStatus { status }
             | HandleAnswer::RevokePermit { status }
             | HandleAnswer::Rebase { status }

@@ -2,7 +2,7 @@
 name = "bond_calculator"
 version = "0.1.0"
 authors = ["Itzik <itzik@keytango.io>"]
-edition = "2018"
+edition = "2021"
 exclude = [
   # Those files are rust-optimizer artifacts. You might want to commit them for convenience but they should not be part of the source code publication.
   "contract.wasm",
@@ -44,6 +44,7 @@ base64 = "0.12.3"
 rand_chacha = { version = "0.2.2", default-features = false }
 rand_core = { version = "0.5.1", default-features = false }
 sha2 = { version = "0.9.1", default-features = false }
+primitive-types = { version = "0.8.0", default-features = false }
 
 [dev-dependencies]
 cosmwasm-schema = { version = "0.9.2" }

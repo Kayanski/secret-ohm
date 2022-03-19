@@ -8,14 +8,15 @@ use cosmwasm_std::{
 
 use crate::msg::{
     HandleMsg, InitMsg, QueryAnswer, QueryMsg,
-    space_pad, PairQueryMsg, PairResponse,
+    space_pad, PairQueryMsg, 
     RESPONSE_BLOCK_SIZE,
 };
 use crate::state::{
     Config, Constants, ReadonlyConfig, Contract
 };
+use primitive_types::U256;
 
-use crate::secretswap_utils::{AssetInfo, PairInfo};
+use crate::secretswap_utils::{AssetInfo, PairInfo, PoolInfo};
 use secret_toolkit::snip20;
 
 use secret_toolkit::utils::{Query};
@@ -58,21 +59,23 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     pad_response(Err(StdError::generic_err("No Handle commands for this contract")))
 }
 
-fn sqrrt(a: u128) -> u128{
+fn sqrrt(a: U256) -> u128{
     let mut c;
-    if a > 3 {
+    let two = U256::from(2);
+    let three = U256::from(3);
+    if a > three {
         c = a;
-        let mut b = a/2+1;
+        let mut b = a / two + U256::one();
         while b < c {
             c = b;
-            b = (( a / b ) + b) / 2 ;
+            b = (( a / b ) + b) / two ;
         }
-    } else if a != 0 {
-        c = 1;
+    } else if a != U256::zero() {
+        c = U256::one();
     } else{
-        c = 0;
+        c = U256::zero();
     }
-    c
+    c.as_u128()
 }
 
 
@@ -88,62 +91,39 @@ pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryM
 
 fn query_pair_info<Q: Querier>(querier: &Q, pair: Contract) -> StdResult<PairInfo>{
     let pair_query_msg = PairQueryMsg::Pair{};
-    let pair_response: PairResponse = pair_query_msg.query(
+    let pair_response: PairInfo = pair_query_msg.query(
         querier,
         pair.code_hash.clone(),
         pair.address.clone(),
     )?;
 
-    Ok(pair_response.pair_info)
+    Ok(pair_response)
+}
+
+fn query_pool_info<Q: Querier>(querier: &Q, pair: Contract) -> StdResult<PoolInfo>{
+    let pool_query_msg = PairQueryMsg::Pool{};
+    let pool_response: PoolInfo = pool_query_msg.query(
+        querier,
+        pair.code_hash.clone(),
+        pair.address.clone(),
+    )?;
+
+    Ok(pool_response)
 }
 
 
 fn get_k_value<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     pair: Contract
-) -> StdResult<u128>{
-    //We start by querying the token pairs and volumes
-    let pair_info = query_pair_info(&deps.querier,pair.clone())?;
-    //We now query the decimals of each token
-    let token0;
-    match pair_info.asset_infos[0].clone(){
-        AssetInfo::Token{ contract_addr,token_code_hash, .. } => {
-            token0 = snip20::token_info_query(
-                &deps.querier,
-                RESPONSE_BLOCK_SIZE,
-                token_code_hash,
-                contract_addr,
-            )?.decimals;
-        }
-        AssetInfo::NativeToken{..}
-            => return Err(StdError::generic_err("No native token in pairs are allowed"))
-    }
+) -> StdResult<U256>{
 
-    let token1;
-    match pair_info.asset_infos[1].clone(){
-        AssetInfo::Token{ contract_addr,token_code_hash, .. } => {
-            token1 = snip20::token_info_query(
-                &deps.querier,
-                RESPONSE_BLOCK_SIZE,
-                token_code_hash,
-                contract_addr,
-            )?.decimals;
-        }
-        AssetInfo::NativeToken{..}
-            => return Err(StdError::generic_err("No native token in pairs are allowed"))
-    }
-    let reserve0 = pair_info.asset0_volume.u128();
-    let reserve1 = pair_info.asset1_volume.u128();
+    let pool_info = query_pool_info(&deps.querier,pair.clone())?;
 
-    let pair_decimals = snip20::token_info_query(
-                            &deps.querier,
-                            RESPONSE_BLOCK_SIZE,
-                            pair_info.token_code_hash,
-                            pair_info.liquidity_token,
-                        )?.decimals;
-    let decimals = token0 + token1 - pair_decimals;
+    // We query the volumes
+    let reserve0 = U256::from(pool_info.assets[0].amount.u128());
+    let reserve1 = U256::from(pool_info.assets[1].amount.u128());
 
-    Ok(reserve0*reserve1/(10u128.pow(decimals.into())))
+    Ok(reserve0*reserve1)
 }
 
 fn query_k_value<S: Storage, A: Api, Q: Querier>(
@@ -151,7 +131,7 @@ fn query_k_value<S: Storage, A: Api, Q: Querier>(
     pair: Contract
 ) -> QueryResult{
     to_binary(&QueryAnswer::GetKValue{
-        value: Uint128(get_k_value(deps,pair)?)
+        value: U256::to_string(&get_k_value(deps,pair)?),
     })  
 }
 
@@ -159,7 +139,52 @@ fn get_total_value<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     pair: Contract
 ) -> StdResult<u128>{
-    Ok(sqrrt(get_k_value(deps,pair)?)*2)
+    let ohm = ReadonlyConfig::from_storage(&deps.storage).constants()?.ohm;
+
+    // We query the decimals of the tokens
+    let pool_info = query_pool_info(&deps.querier,pair.clone())?;
+
+    // We first query decimals for the two tokens : 
+    let decimals = pool_info.assets.iter().map(|x| 
+        match x.info.clone(){
+            AssetInfo::Token{ contract_addr, token_code_hash, .. } => {
+                Ok(
+                    snip20::token_info_query(
+                        &deps.querier,
+                        RESPONSE_BLOCK_SIZE,
+                        token_code_hash,
+                        contract_addr,
+                    )?.decimals
+                )
+            }
+            AssetInfo::NativeToken{..}
+                => return Err(StdError::generic_err("No native token in pairs are allowed"))
+        }
+    ).collect::<StdResult<Vec<u8>>>()?;
+
+    let token0 = match pool_info.assets[0].info.clone(){
+        AssetInfo::Token{ contract_addr, .. } => {
+            contract_addr
+        }
+        AssetInfo::NativeToken{..}
+            => return Err(StdError::generic_err("No native token in pairs are allowed"))
+    };
+
+
+    let (ohm_decimals, other_decimals) = if token0 == ohm.address{
+        (U256::from(decimals[0]),U256::from(decimals[1]))
+    }else{
+        (U256::from(decimals[1]),U256::from(decimals[0]))
+    };
+
+    let mut k = get_k_value(deps,pair)?;
+    if ohm_decimals > other_decimals{
+        k *= U256::from(10).pow(U256::from(ohm_decimals - other_decimals))
+    }else{
+        k /= U256::from(10).pow(U256::from(other_decimals - ohm_decimals))
+    }
+
+    Ok(sqrrt(k)*2)
 }
 
 fn query_total_value<S: Storage, A: Api, Q: Querier>(
@@ -187,7 +212,7 @@ fn get_valuation<S: Storage, A: Api, Q: Querier>(
                 pair_info.liquidity_token,
             )?.total_supply.unwrap().u128();
 
-    Ok(total_value*amount/total_supply / (10u128.pow(18u32)))
+    Ok(total_value*amount/total_supply)
 }
 
 fn query_valuation<S: Storage, A: Api, Q: Querier>(
@@ -206,13 +231,12 @@ fn get_markdown<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<u128>{ 
     let ohm = ReadonlyConfig::from_storage(&deps.storage).constants()?.ohm;
 
+    let pool_info = query_pool_info(&deps.querier,pair.clone())?;
 
-    let pair_info = query_pair_info(&deps.querier,pair.clone())?;
-    let reserve0 = pair_info.asset0_volume.u128();
-    let reserve1 = pair_info.asset1_volume.u128();
+    let reserve0 = pool_info.assets[0].amount.u128();
+    let reserve1 = pool_info.assets[1].amount.u128();
 
-    let reserve; 
-    let token0 = match pair_info.asset_infos[1].clone(){
+    let token0 = match pool_info.assets[0].info.clone(){
         AssetInfo::Token{ contract_addr, .. } => {
             contract_addr
         }
@@ -221,11 +245,12 @@ fn get_markdown<S: Storage, A: Api, Q: Querier>(
     };
 
 
-    if token0 == ohm.address{
-        reserve = reserve1;
+    let reserve = if token0 == ohm.address{
+        reserve1
     } else {
-        reserve = reserve0;
-    }
+        reserve0
+    };
+
     let ohm_decimals = snip20::token_info_query(
         &deps.querier,
         RESPONSE_BLOCK_SIZE,
@@ -239,7 +264,7 @@ fn query_markdown<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     pair: Contract
 ) -> QueryResult{
-    to_binary(&QueryAnswer::Valuation{
+    to_binary(&QueryAnswer::Markdown{
         value: Uint128(get_markdown(deps,pair)?),
     })  
 }

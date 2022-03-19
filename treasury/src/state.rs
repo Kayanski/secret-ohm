@@ -1,15 +1,15 @@
 use std::any::type_name;
 use std::convert::TryFrom;
 
-use cosmwasm_std::{CanonicalAddr, HumanAddr, ReadonlyStorage, StdError, StdResult, Storage, Querier};
+use cosmwasm_std::{CanonicalAddr, HumanAddr, ReadonlyStorage, StdError, StdResult, Storage, Querier, Uint128};
 use cosmwasm_storage::{PrefixedStorage, ReadonlyPrefixedStorage, bucket, bucket_read};
 
 use secret_toolkit::storage::{TypedStore, TypedStoreMut};
-use secret_toolkit::snip20;
+use secret_toolkit::{snip20, utils::Query};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::msg::{status_level_to_u8, u8_to_status_level, ContractStatusLevel};
+use crate::msg::{status_level_to_u8, u8_to_status_level, ContractStatusLevel, CalculatorQueryMsg, ValuationResponse};
 use crate::viewing_key::ViewingKey;
 use serde::de::DeserializeOwned;
 
@@ -40,14 +40,6 @@ pub const MANAGING_ROLE_POSTFIX : &str = "_managing";
 
 pub const RESPONSE_BLOCK_SIZE: usize = 256;
 
-//Bond Valuation
-
-pub fn get_bond_valuation(
-    _token : Contract,
-    amount : u128
-) -> u128 {
-    amount
-}
 //Maybe try to not have duplicate methods BEG
 
 
@@ -56,7 +48,15 @@ pub fn get_bond_valuation(
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct Contract{
     pub address : HumanAddr,
-    pub code_hash : String
+    pub code_hash : String,
+    pub pair_address: Option<HumanAddr>,
+    pub pair_code_hash: Option<String>
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, JsonSchema)]
+pub struct Pair{
+    pub address : HumanAddr,
+    pub code_hash : String,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, JsonSchema)]
@@ -150,11 +150,11 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfig<'a, S> {
         self.as_readonly().reserve_tokens()
     }
 
-    pub fn get_reserve_token_info(&self, token : HumanAddr) -> StdResult<Contract>{
+    pub fn get_reserve_token_info(&self, token : &HumanAddr) -> StdResult<Contract>{
         self.as_readonly().get_reserve_token_info(token)
     }
 
-    pub fn is_reserve_token(&self,token : HumanAddr) -> bool {
+    pub fn is_reserve_token(&self,token : &HumanAddr) -> bool {
         self.as_readonly().is_reserve_token(token)
     }
 
@@ -162,15 +162,19 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfig<'a, S> {
         self.as_readonly().liquidity_tokens()
     }
 
-    pub fn is_liquidity_token(&self,token : HumanAddr) -> bool {
+    pub fn get_liquidity_token_info(&self, token : &HumanAddr) -> StdResult<Contract>{
+        self.as_readonly().get_liquidity_token_info(token)
+    }
+
+    pub fn is_liquidity_token(&self,token : &HumanAddr) -> bool {
         self.as_readonly().is_liquidity_token(token)
     }
 
-    pub fn bond_calculator(&self, token : HumanAddr) -> Contract{
+    pub fn bond_calculator(&self, token : &HumanAddr) -> Contract{
         self.as_readonly().bond_calculator(token)
     }
 
-    pub fn value_of<Q: Querier> (&self, querier: &Q,token : Contract,amount:u128) -> StdResult<u128>{
+    pub fn value_of<Q: Querier>(&self, querier: &Q,token : &HumanAddr,amount:u128) -> StdResult<u128>{
         self.as_readonly().value_of(querier,token,amount)
     }
 }
@@ -266,7 +270,7 @@ impl<'a, S: Storage> Config<'a, S> {
         }
     }
 
-    pub fn set_managing_queue(&mut self,address: &CanonicalAddr,role : ManagingRole,value : u64) -> StdResult<()> {
+    pub fn set_managing_queue(&mut self, address: &CanonicalAddr, role : ManagingRole, value : u64) -> StdResult<()> {
         let role_string : String = role.to_string() + QUEUE_POSTFIX;
         bucket(&role_string.into_bytes(), &mut self.storage).save(address.as_slice(),&value)
     }
@@ -341,10 +345,10 @@ impl<'a, S: Storage> Config<'a, S> {
     pub fn reserve_tokens(&mut self) -> Vec<Contract> {
         self.as_readonly().reserve_tokens()
     }
-    pub fn get_reserve_token_info(&self, token : HumanAddr) -> StdResult<Contract>{
+    pub fn get_reserve_token_info(&self, token : &HumanAddr) -> StdResult<Contract>{
         self.as_readonly().get_reserve_token_info(token)
     }
-    pub fn is_reserve_token(&mut self,token : HumanAddr) -> bool {
+    pub fn is_reserve_token(&mut self,token : &HumanAddr) -> bool {
         self.as_readonly().is_reserve_token(token)
     }
 
@@ -359,16 +363,21 @@ impl<'a, S: Storage> Config<'a, S> {
         self.set_reserve_tokens(reserve_tokens)
     }
 
-    pub fn remove_reserve_token(&mut self, reserve_token_to_remove : Contract){
+    pub fn remove_reserve_token(&mut self, reserve_token_to_remove : Contract) -> StdResult<()>{
         let mut reserve_tokens = self.reserve_tokens();
-        reserve_tokens.retain(|x| *x != reserve_token_to_remove)
+        reserve_tokens.retain(|x| *x != reserve_token_to_remove);
+        self.set_reserve_tokens(reserve_tokens)
     }
 
     pub fn liquidity_tokens(&mut self) -> Vec<Contract> {
         self.as_readonly().liquidity_tokens()
     }
 
-    pub fn is_liquidity_token(&mut self,token : HumanAddr) -> bool {
+    pub fn get_liquidity_token_info(&self, token : &HumanAddr) -> StdResult<Contract>{
+        self.as_readonly().get_liquidity_token_info(token)
+    }
+
+    pub fn is_liquidity_token(&mut self,token : &HumanAddr) -> bool {
         self.as_readonly().is_liquidity_token(token)
     }
 
@@ -383,12 +392,13 @@ impl<'a, S: Storage> Config<'a, S> {
         self.set_liquidity_tokens(liquidity_tokens)
     }
 
-    pub fn remove_liquidity_token(&mut self, liquidity_token_to_remove : Contract){
+    pub fn remove_liquidity_token(&mut self, liquidity_token_to_remove : Contract) -> StdResult<()>{
         let mut liquidity_tokens = self.liquidity_tokens();
-        liquidity_tokens.retain(|x| *x != liquidity_token_to_remove)
+        liquidity_tokens.retain(|x| x.address != liquidity_token_to_remove.address);
+        self.set_liquidity_tokens(liquidity_tokens)
     }
 
-    pub fn bond_calculator(&self, token : HumanAddr) -> Contract{
+    pub fn bond_calculator(&self, token : &HumanAddr) -> Contract{
         self.as_readonly().bond_calculator(token)
     }
 
@@ -396,7 +406,7 @@ impl<'a, S: Storage> Config<'a, S> {
         bucket(&KEY_BOND_CALCULATOR, &mut self.storage).save(token.as_str().as_bytes(),&calculator)
     }
 
-    pub fn value_of<Q: Querier> (&self, querier: &Q, token : Contract,amount:u128) -> StdResult<u128>{
+    pub fn value_of<Q: Querier> (&self, querier: &Q,token : &HumanAddr,amount:u128) -> StdResult<u128>{
         self.as_readonly().value_of(querier,token,amount)
     }
 }
@@ -462,10 +472,6 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
         )?; 
         let total_ohm_supply = ohm_token_info.total_supply.unwrap_or_default().u128();
         Ok(self.total_reserves() - (total_ohm_supply - self.total_debt()))
-
-
-        //total_supply :        60_000_000_000_000 
-        //total_reserves :  14_000_000_000_000_000
     }
 
     fn total_debt(&self) -> u128 {
@@ -500,15 +506,15 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
         get_bin_data(self.0, KEY_RESERVE_TOKENS).unwrap_or_default()
     }
 
-    pub fn get_reserve_token_info(&self, token : HumanAddr) -> StdResult<Contract>{
+    pub fn get_reserve_token_info(&self, token : &HumanAddr) -> StdResult<Contract>{
         self.reserve_tokens()
         .into_iter()
-        .filter(|voc| voc.address == token.clone())
+        .filter(|voc| voc.address == *token)
         .collect::<Vec<Contract>>().get(0).ok_or_else(
-            || StdError::generic_err("No reserve_tokens with this name")
+            || StdError::generic_err("No reserve_tokens with this address")
         ).map(|x| x.clone())
     }
-    pub fn is_reserve_token(&self, token : HumanAddr) -> bool {
+    pub fn is_reserve_token(&self, token : &HumanAddr) -> bool {
         self.get_reserve_token_info(token).is_ok()
     }
 
@@ -516,7 +522,16 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
         get_bin_data(self.0, KEY_LIQUIDITY_TOKENS).unwrap_or_default()
     }
 
-    pub fn is_liquidity_token(&self, token : HumanAddr) -> bool {
+    pub fn get_liquidity_token_info(&self, token : &HumanAddr) -> StdResult<Contract>{
+        self.liquidity_tokens()
+        .into_iter()
+        .filter(|voc| voc.address == *token)
+        .collect::<Vec<Contract>>().get(0).ok_or_else(
+            || StdError::generic_err("No liquidity_tokens with this address")
+        ).map(|x| x.clone())
+    }
+
+    pub fn is_liquidity_token(&self, token : &HumanAddr) -> bool {
         let liquidity_tokens_filtered : Vec<Contract> = 
         self.liquidity_tokens()
         .into_iter()
@@ -525,32 +540,60 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
         !liquidity_tokens_filtered.is_empty()
     }
 
-    pub fn bond_calculator(&self, token : HumanAddr) -> Contract{
+    pub fn bond_calculator(&self, token : &HumanAddr) -> Contract{
         bucket_read(KEY_BOND_CALCULATOR, self.0).load(token.as_str().as_bytes()).unwrap()
     }
 
-    pub fn value_of<Q: Querier> (&self, querier: &Q,token : Contract,amount:u128) -> StdResult<u128>{
-        if self.is_reserve_token(token.address.clone()){
+    pub fn value_of<Q: Querier>(&self, querier: &Q,token : &HumanAddr,amount:u128) -> StdResult<u128>{
+        if self.is_reserve_token(token){
             let ohm_decimals = snip20::token_info_query(
                 querier,
                 RESPONSE_BLOCK_SIZE,
                 self.constants()?.ohm.code_hash,
                 self.constants()?.ohm.address,
             )?.decimals;
+
+            let token_info = self.get_reserve_token_info(token)?;
             let token_decimals = snip20::token_info_query(
                 querier,
                 RESPONSE_BLOCK_SIZE,
-                token.code_hash,
-                token.address,
+                token_info.code_hash,
+                token_info.address,
             )?.decimals;
             Ok(amount*10_u128.pow(ohm_decimals.into())/10_u128.pow(token_decimals.into()))
-        }else if self.is_liquidity_token(token.address.clone()){
-            Ok(get_bond_valuation(token,amount))
-        }else if token.address == self.constants()?.ohm.address{
+        }else if self.is_liquidity_token(&token){
+            self.get_liquidity_valuation(token, amount, querier)
+        }else if *token == self.constants()?.ohm.address{
             Ok(amount)
         }else{
             Err(StdError::generic_err("The token was not registered"))           
         }
+    }
+
+    //Bond Valuation
+    pub fn get_liquidity_valuation<Q: Querier>(
+        &self,
+        token : &HumanAddr,
+        amount : u128,
+        querier: &Q,
+    ) -> StdResult<u128> {
+
+        let liquidity_info = self.get_liquidity_token_info(&token)?;
+
+        let pair = Pair{
+            address : liquidity_info.pair_address.unwrap(),
+            code_hash : liquidity_info.pair_code_hash.unwrap(),
+        };
+        let valuation_msg = CalculatorQueryMsg::Valuation { 
+            pair: pair,
+            amount: Uint128(amount),
+        };
+        let valuation_response: ValuationResponse = valuation_msg.query(
+            querier,
+            self.bond_calculator(&token).code_hash.clone(),
+            self.bond_calculator(&token).address.clone(),
+        )?;
+        Ok(valuation_response.valuation.value.u128())
     }
 }
 

@@ -28,8 +28,12 @@ pub const PREFIX_VIEW_KEY: &[u8] = b"viewingkey";
 // Config
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct Constants {
+    pub name: String,
+    pub symbol: String,
     pub ohm: Contract,
-    pub principle: Contract,
+    pub ohm_decimals: u8,
+    pub principle: Principle,
+    pub principle_decimals: u8,
     pub treasury: Contract,
     pub dao: HumanAddr,
     pub bond_calculator: Option<Contract>,
@@ -53,6 +57,7 @@ pub struct Terms {
     pub control_variable: Uint128, // scaling variable for price
     pub vesting_term: u64, // in blocks
     pub minimum_price: Uint128, // vs principle value
+    pub maximum_price: Uint128, // (to limit the token price)
     pub max_payout: Uint128 ,// in thousandths of a %. i.e. 500 = 0.5%
     pub fee: Uint128, // as % of bond payout, in hundreths. ( 500 = 5% = 0.05 for every 1 paid)
     pub max_debt: Uint128, // 9 decimal debt ratio, max % total supply created as debt
@@ -102,6 +107,15 @@ pub struct Contract{
     pub address : HumanAddr,
     pub code_hash : String
 }
+
+
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct Principle{
+    pub token: Contract,
+    pub pair: Option<Contract>
+}
+
 
 pub struct ReadonlyConfig<'a, S: ReadonlyStorage> {
     storage: ReadonlyPrefixedStorage<'a, S>,

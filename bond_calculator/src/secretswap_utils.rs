@@ -317,6 +317,12 @@ impl AssetInfoRaw {
 
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct PoolInfo {
+    pub assets: [Asset; 2],
+    pub total_share: Uint128,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PairInfo {
     pub asset_infos: [AssetInfo; 2],
     pub contract_addr: HumanAddr,

@@ -3,7 +3,7 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
-use bond_calculator::msg::{HandleAnswer, HandleMsg, InitMsg, QueryAnswer, QueryMsg};
+use stakin_helper::msg::{HandleAnswer, HandleMsg, InitMsg, QueryAnswer, QueryMsg};
 
 fn main() {
     let mut out_dir = current_dir().unwrap();

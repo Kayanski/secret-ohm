@@ -1,0 +1,65 @@
+{
+	"token":{
+		"store" : 2669406
+	},
+	"OHM" : {
+		"store" : 2669406,
+		"init" : 29685
+	},
+	"sUST": {
+		"store" : 2669406,
+		"init" : 34591
+	},
+	"sSCRT": {
+		"store" : 2669406,
+		"init" : 35045
+	},
+	"next_interaction" : 27934,
+	"sOHM": {
+		"store" : 2460838,
+		"init" : 29861
+	},
+	"treasury": {
+		"store" : 2016912,
+		"init" : 107474
+	},
+	"bond_calculator": {
+		"store" : 1315390,
+		"init" : 26945
+	},
+	"distributor": {
+		"store" : 1440174,
+		"init" : 30751
+	},
+	"staking": {
+		"store" : 2433800,
+		"init" : 79505
+	},
+	"staking-warmup": {
+		"store" : 999872,
+		"init" : 28949
+	},
+	"staking-helper": {
+		"store" : 1078784,
+		"init" : 40631
+	},
+	"sUST-bond": {
+		"store" : 2401516,
+		"init" : 45583
+	},
+	"sSCRT-bond": {
+		"store" : 2401516,
+		"init" : 45789
+	},
+	"treasury_interactions":[24708,29205,24708,30357],
+	"bonds_interactions":[31135,31135,30683,30700],
+	"sohm-interactions":[33962],
+	"staking-interactions":[26258,27066],
+	"distributor-interactions":[24456],
+	"other-treasury-interactions":[24678,29173,24714,31415,24751,29249],
+	"other_ohm-interactions":[24929],
+	"UST-interactions":[73140,70950],
+	"other-staking-interactions":[86407],
+	"ohm-interaction-2":[152700],
+	"staking-interactions-3":[61969]
+}

@@ -13,13 +13,11 @@ use crate::msg::{
 use crate::rand::sha_256;
 use crate::state::{
      Config, Constants, Debtors, ReadonlyConfig, ReadonlyDebtors,
-    ManagingRole, Contract, Deposited, ReadonlyDeposited
+    ManagingRole, Contract, Deposited, ReadonlyDeposited, RESPONSE_BLOCK_SIZE
 };
 
 use secret_toolkit::snip20;
 
-/// We make sure that responses from `handle` are padded to a multiple of this size.
-pub const RESPONSE_BLOCK_SIZE: usize = 256;
 pub const PREFIX_REVOKED_PERMITS: &str = "revoked_permits";
 pub const COMMON_VIEWING_KEY : &str = "ALL_ORGANISATION_INFO_SHOULD_BE_PUBLIC";
 
@@ -156,7 +154,6 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
                 } => receive(deps, env, from, amount.u128(), msg),
 
         //Normal messages
-        HandleMsg::Withdraw { token, amount,.. } => withdraw(deps, env, token, amount.u128()),
         HandleMsg::IncurDebt { token, amount, .. } => incur_debt(deps, env, token, amount.u128()),
         HandleMsg::Manage { token, amount, .. } => manage(deps, env, token, amount.u128()),
         HandleMsg::MintRewards { recipient, amount, .. } => mint_rewards(deps, env, recipient, amount.u128()),
@@ -194,20 +191,20 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
 
 ) -> StdResult<HandleResponse> {
     let mut config = Config::from_storage(&mut deps.storage);
-    if !(config.is_reserve_token(token.clone()) || config.is_liquidity_token(token.clone())){
+    if !(config.is_reserve_token(&token) || config.is_liquidity_token(&token)){
         return Err(StdError::generic_err(
                     "Token not accepted",
                 ));
     }
     let from_canonical = deps.api.canonical_address(&from)?;
-    if (config.is_reserve_token(token.clone()) && !config.has_managing_position(&from_canonical,ManagingRole::ReserveDepositor)) |
-        (config.is_liquidity_token(token.clone()) && !config.has_managing_position(&from_canonical,ManagingRole::LiquidityDepositor)){
+    if (config.is_reserve_token(&token) && !config.has_managing_position(&from_canonical,ManagingRole::ReserveDepositor)) |
+        (config.is_liquidity_token(&token) && !config.has_managing_position(&from_canonical,ManagingRole::LiquidityDepositor)){
         return Err(StdError::generic_err(
                     "Depositor not approved",
                 ));
     }
 
-    let value = config.value_of(&deps.querier,config.get_reserve_token_info(token.clone())?,amount)?;
+    let value = config.value_of(&deps.querier,&token,amount)?;
 
     let send = if let Some(send_) = value.checked_sub(profit) {
         send_
@@ -251,15 +248,22 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
 pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    token : HumanAddr,
-    amount: u128,
-
+    sent_token: HumanAddr,
+    sent_amount: u128,
+    token_address : HumanAddr,
+    withdraw_amount: u128
 ) -> StdResult<HandleResponse> {
     let sender = env.message.sender.clone();
     let mut config = Config::from_storage(&mut deps.storage);
-    if !config.is_reserve_token(token.clone()){
+    if !config.is_reserve_token(&token_address){
         return Err(StdError::generic_err(
                     "Token not accepted",
+                ));
+    }
+
+    if sent_token != config.constants()?.ohm.address{
+        return Err(StdError::generic_err(
+                    "Can only withdraw by burning OHM",
                 ));
     }
     let canonical_sender = deps.api.canonical_address(&sender)?;
@@ -268,14 +272,17 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
                     "Not authorized",
                 ));
     }
-
-    let value = config.value_of(&deps.querier,config.get_reserve_token_info(token)?,amount)?;
-
+    let value = config.value_of(&deps.querier,&token_address,withdraw_amount)?;
+    if value != sent_amount{
+        return Err(StdError::generic_err(
+            "Sent token amount and specified reserve amount don't match",
+        ));
+    }
     let mut messages = vec![];
 
     //We burn some OHM
     messages.push(snip20::burn_msg(
-        Uint128(value),
+        Uint128(sent_amount),
         None,
         RESPONSE_BLOCK_SIZE,
         config.constants()?.ohm.code_hash,
@@ -289,15 +296,16 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
             "This withdraw attemp is not possible, not enough reserves",
         ));
     }
+    let token = config.get_reserve_token_info(&token_address)?;
     //We transfer the withdrawn amount
     messages.push(snip20::send_msg(
         sender,
-        Uint128(amount),
+        Uint128(withdraw_amount),
         None,
         None,
         RESPONSE_BLOCK_SIZE,
-        config.constants()?.ohm.code_hash,
-        config.constants()?.ohm.address
+        token.code_hash,
+        token.address
         )?);
 
     Ok(HandleResponse {
@@ -312,15 +320,18 @@ pub fn receive<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     from: HumanAddr,
-    amount: u128,
+    sent_amount: u128,
     msg: Binary,
 ) -> StdResult<HandleResponse> {
 
     let msg: ReceiveMsg = from_binary(&msg)?;
-    let token = env.message.sender.clone();
+    let sent_token = env.message.sender.clone();
     match msg {
-        ReceiveMsg::Deposit {profit,..} => deposit(deps, env, from, token, amount, profit.u128()),
-        ReceiveMsg::RepayDebt {..} => repay_debt(deps, env, from, token, amount),
+        ReceiveMsg::Deposit {profit,..} => deposit(deps, env, from, sent_token, sent_amount, profit.u128()),
+
+        ReceiveMsg::Withdraw { token, amount,.. } => withdraw(deps, env, sent_token, sent_amount, token, amount.u128()),
+
+        ReceiveMsg::RepayDebt {..} => repay_debt(deps, env, from, sent_token, sent_amount),
     }
 }
 pub fn incur_debt<S: Storage, A: Api, Q: Querier>(
@@ -332,7 +343,7 @@ pub fn incur_debt<S: Storage, A: Api, Q: Querier>(
     let sender = env.message.sender.clone();
 
     let config = ReadonlyConfig::from_storage(& deps.storage);
-    if !config.is_reserve_token(token.clone()){
+    if !config.is_reserve_token(&token){
         return Err(StdError::generic_err(
                     "Token not accepted",
                 ));
@@ -343,7 +354,7 @@ pub fn incur_debt<S: Storage, A: Api, Q: Querier>(
                     "Not authorized",
                 ));
     }
-    let value = config.value_of(&deps.querier,config.get_reserve_token_info(token.clone())?,amount)?;
+    let value = config.value_of(&deps.querier,&token,amount)?;
     let from_balance = snip20::balance_query(
         &deps.querier,
         sender.clone(),
@@ -375,7 +386,7 @@ pub fn incur_debt<S: Storage, A: Api, Q: Querier>(
         debtors.set_account_debt(&canonical_sender,new_debt);
     } else {
         return Err(StdError::generic_err(
-            "Not possible, the debt of this account is above the variable capacity",
+            "Not possible, the debt of this account is above the u128 capacity",
         ));
     };
     // Update the total debt 
@@ -384,7 +395,7 @@ pub fn incur_debt<S: Storage, A: Api, Q: Querier>(
         config.set_total_debt(new_total_debt);
     } else {
         return Err(StdError::generic_err(
-            "Not possible, the total debt is above the variable capacity",
+            "Not possible, the total debt is above the u128 capacity",
         ));
     }
      // Update the total reserves
@@ -395,7 +406,7 @@ pub fn incur_debt<S: Storage, A: Api, Q: Querier>(
             "Not enough reserves to incur debt",
         ));
     }
-    let token_info = config.get_reserve_token_info(token.clone())?;
+    let token_info = config.get_reserve_token_info(&token)?;
     
 
     let messages = vec![
@@ -425,22 +436,25 @@ pub fn repay_debt<S: Storage, A: Api, Q: Querier>(
 
 ) -> StdResult<HandleResponse> {
 
-
     let mut config = Config::from_storage(&mut deps.storage);
+
     let ohm = config.constants()?.ohm.clone();
     let token_is_ohm = token == ohm.address;
-    if ! (config.is_reserve_token(token.clone()) || token_is_ohm){
+    if ! (config.is_reserve_token(&token) || token_is_ohm){
         return Err(StdError::generic_err(
                     "Token not accepted",
                 ));
     }
+
     let canonical_from = deps.api.canonical_address(&from)?;
     if !config.has_managing_position(&canonical_from,ManagingRole::Debtor){
         return Err(StdError::generic_err(
                     "Not authorized",
                 ));
     }
-    let value = config.value_of(&deps.querier,config.get_reserve_token_info(token)?,amount)?;
+
+    let value = config.value_of(&deps.querier,&token,amount)?;
+
     // Update the total debt 
     if let Some(new_total_debt) = config.total_debt().checked_sub(value){
         config.set_total_debt(new_total_debt);
@@ -471,6 +485,7 @@ pub fn repay_debt<S: Storage, A: Api, Q: Querier>(
         )?);
 
     }
+    
     //Update the debtors debt
     let mut debtors = Debtors::from_storage(&mut deps.storage);
     if let Some(new_debt) = debtors.debt(&canonical_from).checked_sub(value){
@@ -499,15 +514,15 @@ pub fn manage<S: Storage, A: Api, Q: Querier>(
     let sender = env.message.sender.clone();
     let mut config = Config::from_storage(&mut deps.storage);
     let canonical_sender = deps.api.canonical_address(&sender)?;
-    if !((config.is_reserve_token(token.clone()) & config.has_managing_position(&canonical_sender,ManagingRole::ReserveManager)) | 
-        (config.is_liquidity_token(token.clone()) & config.has_managing_position(&canonical_sender,ManagingRole::LiquidityManager)))
+    if !((config.is_reserve_token(&token) & config.has_managing_position(&canonical_sender,ManagingRole::ReserveManager)) | 
+        (config.is_liquidity_token(&token) & config.has_managing_position(&canonical_sender,ManagingRole::LiquidityManager)))
     {
         return Err(StdError::generic_err(
                     "Token not accepted",
                 ));
     }
 
-    let value = config.value_of(&deps.querier,config.get_reserve_token_info(token.clone())?,amount)?;
+    let value = config.value_of(&deps.querier,&token,amount)?;
     if value > config.excess_reserves(&deps.querier)?{
         return Err(StdError::generic_err(
                     "Insufficient reserves" ,
@@ -520,7 +535,7 @@ pub fn manage<S: Storage, A: Api, Q: Querier>(
             "Insufficient reserves",
         ));
     }
-    let token_info = config.get_reserve_token_info(token.clone())?;
+    let token_info = config.get_reserve_token_info(&token)?;
     let messages = vec![snip20::send_msg(
          sender,
          Uint128(amount),
@@ -544,7 +559,7 @@ pub fn mint_rewards<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     recipient: HumanAddr,
-    amount: u128,
+    mut amount: u128,
 ) -> StdResult<HandleResponse> {
 
     let sender = env.message.sender.clone();
@@ -558,9 +573,7 @@ pub fn mint_rewards<S: Storage, A: Api, Q: Querier>(
     }
     if amount > config.excess_reserves(&deps.querier)?
     {
-        return Err(StdError::generic_err(
-                    "Insufficient reserves",
-                ));
+        amount = config.excess_reserves(&deps.querier)?;
     }
 
     Ok(HandleResponse {
@@ -599,7 +612,7 @@ pub fn audit_reserves<S: Storage, A: Api, Q: Querier>(
             token.address.clone()
         )?.amount.u128();  
 
-        reserves = reserves.checked_add(config.value_of(&deps.querier,token,balance)?)
+        reserves = reserves.checked_add(config.value_of(&deps.querier,&token.address,balance)?)
         .ok_or_else(|| StdError::generic_err("Too much reserves"))?;
     }
     for token in config.liquidity_tokens(){
@@ -613,7 +626,7 @@ pub fn audit_reserves<S: Storage, A: Api, Q: Querier>(
             token.address.clone()
         )?.amount.u128();   
 
-        reserves = reserves.checked_add(config.value_of(&deps.querier,token,balance)?)
+        reserves = reserves.checked_add(config.value_of(&deps.querier,&token.address,balance)?)
         .ok_or_else(|| StdError::generic_err("Too much reserves"))?;
     }
     config.set_total_reserves(reserves);
@@ -722,45 +735,68 @@ pub fn toggle_token_queue<S: Storage, A: Api, Q: Querier>(
     let canonical_addr = deps.api.canonical_address(&token.address)?;
 
     let has_managing_position = match role.clone(){
-        ManagingRole::ReserveToken{} => config.is_reserve_token(token.address.clone()),
-        ManagingRole::LiquidityToken{} => config.is_liquidity_token(token.address.clone()),
+        ManagingRole::ReserveToken{} => config.is_reserve_token(&token.address),
+        ManagingRole::LiquidityToken{} => config.is_liquidity_token(&token.address),
         ManagingRole::SOHM{} => true,
         _ => return Err(StdError::generic_err("toggle token with a non token role"))
     };
     let queue = config.managing_queue(&canonical_addr,role.clone())?;
+    let mut messages = vec![];
     if !has_managing_position{
         if queue == 0{
             return Err(StdError::generic_err("You need to queue first"));
-        }else if queue <= env.block.height{
+        }else if queue > env.block.height{
             return Err(StdError::generic_err("Queue is not over yet, wait a bit more"));
         }
         config.set_managing_queue(&canonical_addr,role.clone(),0)?;
+        messages.push(
+            snip20::register_receive_msg(
+                env.contract_code_hash.clone(),
+                None,
+                RESPONSE_BLOCK_SIZE,
+                token.code_hash.clone(),
+                token.address.clone(),
+            )?
+        );
+        messages.push(
+            snip20::set_viewing_key_msg(
+                COMMON_VIEWING_KEY.to_string(),
+                None,
+                RESPONSE_BLOCK_SIZE,
+                token.code_hash.clone(),
+                token.address.clone(),
+            )?
+        );
         match role.clone(){
             ManagingRole::ReserveToken{} => config.add_reserve_tokens(vec![token]),
             ManagingRole::LiquidityToken{} => {
                 config.add_liquidity_tokens(vec![token.clone()])?;
-                config.set_bond_calculator(token.address.clone(),liquidity_calculator.unwrap())
+                if let Some(calculator) = liquidity_calculator{
+                    config.set_bond_calculator(token.address.clone(),calculator)
+                }else{
+                    return Err(StdError::generic_err("you need a calculator to add a liquidity token"));
+                }                
             },
             _ => return Err(StdError::generic_err("toggle token with a non token role"))
         }?;
     }else{
         match role.clone(){
-            ManagingRole::ReserveToken{} => config.remove_reserve_token(token)  ,
+            ManagingRole::ReserveToken{} => config.remove_reserve_token(token),
             ManagingRole::LiquidityToken{} => config.remove_liquidity_token(token),
             ManagingRole::SOHM{} => {
 
                 config.set_managing_queue(&canonical_addr,role,0)?;
                 let mut consts = config.constants()?;
                 consts.sohm = token;
-                config.set_constants(&consts)?;
+                config.set_constants(&consts)
             },
 
 
             _ => return Err(StdError::generic_err("toggle token with a non token role"))
-        };
+        }?;
     }
     Ok(HandleResponse {
-        messages : vec![],
+        messages : messages,
         log: vec![],
         data: Some(to_binary(&HandleAnswer::ToggleQueue { status: Success })?),
     })
@@ -827,7 +863,7 @@ fn query_value_of<S: Storage, A: Api, Q: Querier>(
         value: Uint128(
             config.value_of(
                 &deps.querier,
-                config.get_reserve_token_info(token)?,
+                &token,
                 amount.u128()
             )?
         ),

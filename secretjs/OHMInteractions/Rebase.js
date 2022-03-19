@@ -5,7 +5,13 @@ const {
 const fs = require("fs");
 
 const { fromBase64 } = require("@iov/encoding");
-require('dotenv').config();
+var arguments = process.argv;
+
+if(arguments[2] == "staging"){
+  require('dotenv').config({ path: '.env.testnet' });
+}else{
+  require('dotenv').config();;
+}
 
 //Fees
 

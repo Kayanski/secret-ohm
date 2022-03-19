@@ -1322,14 +1322,14 @@ fn perform_transfer<T: Storage>(
 ) -> StdResult<()> {
     let mut gon_balances = GonBalances::from_storage(store);
 
-    let gon_value = gons_for_balance(U256::from(amount),U256::from_dec_str(&constants.gons_per_fragment).unwrap())?;
+    let gon_value = gons_for_balance(U256::from_dec_str(&constants.gons_per_fragment).unwrap(),U256::from(amount))?;
     let mut from_balance = gon_balances.gon_balance(from);
     if let Some(new_from_balance) = from_balance.checked_sub(gon_value) {
         from_balance = new_from_balance;
     } else {
         return Err(StdError::generic_err(format!(
             "insufficient funds: balance={}, required={}",
-            from_balance, gon_value
+            from, balance_for_gons(U256::from_dec_str(&constants.gons_per_fragment).unwrap(),gon_value)?
         )));
     }
     gon_balances.set_account_gon_balance(from, from_balance);

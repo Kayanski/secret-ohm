@@ -4,58 +4,13 @@ const {
 
 const fs = require("fs");
 
-const { fromBase64 } = require("@iov/encoding");
 require('dotenv').config();
 
 
 //DAO Address
 const DAOAddress = "secretnothing189765"
 
-// Initial staking index
-const initialIndex = '7675210820';
-
-// First block epoch occurs
-const firstEpochBlock = 8961000;
-
-// What epoch will be first epoch
-const firstEpochNumber = 338;
-
-// How many blocks are in each epoch
-const epochLengthInBlocks = 2200;
-
-// Initial reward rate for epoch
-const initialRewardRate = '3000';
-
-// Initial mint for Frax and DAI (10,000,000)
-const initialMint = '10000000000000000000000000';
-
-// DAI bond BCV
-const daiBondBCV = '369';
-
-// Frax bond BCV
-const fraxBondBCV = '690';
-
-// Bond vesting length in blocks. 33110 ~ 5 days
-const bondVestingLength = '33110';
-
-// Min bond price
-const minBondPrice = '50000';
-
-// Max bond payout
-const maxBondPayout = '50'
-
-// DAO fee for bond
-const bondFee = '10000';
-
-// Max debt bond can take on
-const maxBondDebt = '1000000000000000';
-
-// Initial Bond debt
-const intialBondDebt = '0'
-
 //Fees
-
-
 const customFees = {
   upload: {
       amount: [{ amount: "4000000", denom: "uscrt" }],
@@ -185,6 +140,8 @@ const main = async () => {
    
 
   let handleMsg,response;
+  console.log(base64ToJson("eyJ0b2tlbl9pbmZvIjp7Im5hbWUiOiJGb25kQ29tbXVuIiwic3ltYm9sIjoiRkNUIiwiZGVjaW1hbHMiOjksInRvdGFsX3N1cHBseSI6IjYwMDAwMDAwMDAwMDAwMCJ9fQ=="));
+  console.log(Buffer.from([0, 49, 188, 237, 2, 219, 0, 0]).readBigInt64BE());
   /*
   hyiuy
   queryMsg = {
@@ -205,6 +162,16 @@ const main = async () => {
   
   response = await client.queryContractSmart(sOHMcontract.contractAddress,queryMsg)
   console.log(response);
+
+  queryMsg = {
+    managing_addresses:{role:"ReserveManager"}
+  };
+
+  response = await client.queryContractSmart(treasurycontract.contractAddress,queryMsg)
+  console.log(response);
+
+
+
 
   queryMsg = {
     index:{}

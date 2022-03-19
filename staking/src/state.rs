@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::msg::{status_level_to_u8, u8_to_status_level, ContractStatusLevel};
 use crate::viewing_key::ViewingKey;
-use serde::de::DeserializeOwned;
 
 use primitive_types::U256;
 
@@ -26,7 +25,6 @@ pub const KEY_TOTAL_SUPPLY: &[u8] = b"total_supply";
 pub const KEY_CURRENTLY_STAKING: &[u8] = b"currently_staking";
 pub const KEY_CONTRACT_STATUS: &[u8] = b"contract_status";
 pub const KEY_WARMUP_INFO: &[u8] = b"warmup_info";
-pub const KEY_TX_COUNT: &[u8] = b"tx-count";
 
 pub const PREFIX_CONFIG: &[u8] = b"config";
 pub const PREFIX_BALANCES: &[u8] = b"balances";
@@ -152,12 +150,8 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfig<'a, S> {
         self.as_readonly().contract_status()
     }
 
-    pub fn warmup_info(&mut self, address: &CanonicalAddr) -> Claim {
+    pub fn warmup_info(&self, address: &CanonicalAddr) -> Claim {
         self.as_readonly().warmup_info(address)
-    }
-
-    pub fn tx_count(&self) -> u64 {
-        self.as_readonly().tx_count()
     }
 }
 
@@ -165,9 +159,6 @@ fn ser_bin_data<T: Serialize>(obj: &T) -> StdResult<Vec<u8>> {
     bincode2::serialize(&obj).map_err(|e| StdError::serialize_err(type_name::<T>(), e))
 }
 
-fn deser_bin_data<T: DeserializeOwned>(data: &[u8]) -> StdResult<T> {
-    bincode2::deserialize::<T>(&data).map_err(|e| StdError::serialize_err(type_name::<T>(), e))
-}
 
 fn set_bin_data<T: Serialize, S: Storage>(storage: &mut S, key: &[u8], data: &T) -> StdResult<()> {
     let bin_data = ser_bin_data(data)?;
@@ -176,14 +167,6 @@ fn set_bin_data<T: Serialize, S: Storage>(storage: &mut S, key: &[u8], data: &T)
     Ok(())
 }
 
-fn get_bin_data<T: DeserializeOwned, S: ReadonlyStorage>(storage: &S, key: &[u8]) -> StdResult<T> {
-    let bin_data = storage.get(key);
-
-    match bin_data {
-        None => Err(StdError::not_found("Key not found in storage")),
-        Some(bin_data) => Ok(deser_bin_data(&bin_data)?),
-    }
-}
 
 pub struct Config<'a, S: Storage> {
     storage: PrefixedStorage<'a, S>,
@@ -249,14 +232,6 @@ impl<'a, S: Storage> Config<'a, S> {
     pub fn warmup_info(&self, address: &CanonicalAddr) -> Claim {
         self.as_readonly().warmup_info(address)
     }
-
-    pub fn tx_count(&self) -> u64 {
-        self.as_readonly().tx_count()
-    }
-
-    pub fn set_tx_count(&mut self, count: u64) -> StdResult<()> {
-        set_bin_data(&mut self.storage, KEY_TX_COUNT, &count)
-    }
 }
 
 /// This struct refactors out the readonly methods that we need for `Config` and `ReadonlyConfig`
@@ -317,10 +292,6 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
         bucket_read(KEY_WARMUP_INFO, self.0)
             .load(address.as_slice())
             .unwrap_or_default()
-    }
-
-    pub fn tx_count(&self) -> u64 {
-        get_bin_data(self.0, KEY_TX_COUNT).unwrap_or_default()
     }
 }
 
